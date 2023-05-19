@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package chord;
+
+message FindSuccessorRequest {
+  int32 id = 1;
+}
+
+message FindSuccessorResponse {
+  string address = 1;
+}
+
+message NotifyRequest {
+  string address = 1;
+}
+
+message NotifyResponse {
+  // This message is intentionally left empty.
+}
+
+
+service Chord {
+  rpc FindSuccessor (FindSuccessorRequest) returns (FindSuccessorResponse);
+  rpc Notify (NotifyRequest) returns (NotifyResponse);
+}
