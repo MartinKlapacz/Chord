@@ -1,9 +1,12 @@
 use std::error::Error;
 use std::io::ErrorKind;
+use std::sync::Arc;
 
 use log::{error, info, LevelFilter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tonic::transport::Server;
 
 use crate::chord::chord_proto::chord_server::ChordServer;
@@ -24,7 +27,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let grpc_addr = "127.0.0.1:50051".parse()?;
     let tcp_addr = "127.0.0.1:50052";
 
-    let chord_service = ChordService::default();
 
 
     tokio::spawn(async move {
@@ -33,32 +35,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
             info!("New client connection established");
-            tokio::spawn(async move {
-                loop {
-                    let size_res = socket.read_u16().await;
-                    let size = match size_res {
-                        Ok(size) => size,
-                        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                            info!("Client disconnected");
-                            0
-                        }
-                        _ => panic!("Unexpected Error")
-                    };
-                    if size == 0 {
-                        break;
-                    }
-                    let code = socket.read_u16().await.unwrap();
-                    match code {
-                        code if code == DHT_PUT => handle_put(&mut socket, size).await,
-                        code if code == DHT_GET => handle_get(&mut socket).await,
-                        _ => panic!("invalid code")
-                    }.unwrap();
-                }
-            });
+            tokio::spawn(async move { handle_client(socket).await.unwrap() });
         }
     });
 
     info!("Starting up gRPC service");
+    let chord_service = ChordService::default();
     Server::builder()
         .add_service(ChordServer::new(chord_service))
         .serve(grpc_addr)
@@ -69,13 +51,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
 async fn handle_client(mut socket: TcpStream) -> Result<(), Box<dyn Error>> {
-    let size = socket.read_u16().await?;
-    let code = socket.read_u16().await?;
-    match code {
-        code if code == DHT_PUT => handle_put(&mut socket, size).await,
-        code if code == DHT_GET => handle_get(&mut socket).await,
-        _ => panic!("invalid code {}", code)
-    }?;
+    loop {
+        let size_res = socket.read_u16().await;
+        let size = match size_res {
+            Ok(size) => size,
+            Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                info!("Client disconnected");
+                0
+            }
+            _ => panic!("Unexpected Error")
+        };
+        if size == 0 {
+            break;
+        }
+        let code = socket.read_u16().await.unwrap();
+        match code {
+            code if code == DHT_PUT => handle_put(&mut socket, size).await,
+            code if code == DHT_GET => handle_get(&mut socket).await,
+            _ => panic!("invalid code {}", code)
+        }.unwrap();
+    }
     Ok(())
 }
 
@@ -93,6 +88,7 @@ async fn handle_get(socket: &mut TcpStream) -> Result<(), Box<dyn Error>> {
 
 async fn handle_put(mut socket: &TcpStream, size: u16) -> Result<(), Box<dyn Error>> {
     info!("Processing PUT...");
+    // todo
     Ok(())
 }
 
