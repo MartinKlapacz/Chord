@@ -1,11 +1,42 @@
 use tonic::{Request, Response, Status};
 
+use crate::crypto;
+use crate::crypto::Key;
+
 pub mod chord_proto {
     tonic::include_proto!("chord");
 }
 
+type NodeUrl = String;
+
 #[derive(Default)]
-pub struct ChordService {}
+pub struct ChordService {
+    finger_table: Vec<FingerEntry>,
+}
+
+pub struct FingerEntry {
+    key: Key,
+    url: NodeUrl,
+}
+
+
+impl ChordService {
+    pub fn new(host: &str, port: u16, m: usize) -> ChordService {
+        let url = format!("{}:{}", host, port);
+        let id = crypto::hash(url);
+
+        let mut finger_table = Vec::with_capacity(m);
+        for i in 0..m {
+            let start = (id + 2u128.pow(i as u32)) % 2u128.pow(m as u32);
+            finger_table.push(FingerEntry {
+                key: start,
+                url: NodeUrl::default(),
+            });
+        };
+
+        ChordService { finger_table }
+    }
+}
 
 #[tonic::async_trait]
 impl chord_proto::chord_server::Chord for ChordService {

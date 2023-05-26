@@ -1,12 +1,8 @@
 use std::error::Error;
-use std::io::ErrorKind;
-use std::sync::Arc;
 
-use log::{error, info, LevelFilter};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpSocket, TcpStream};
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
+use log::{info, LevelFilter};
+use tokio::io::AsyncWriteExt;
+use tokio::net::{TcpListener, TcpStream};
 use tonic::transport::Server;
 
 use crate::chord::chord_proto::chord_server::ChordServer;
@@ -15,6 +11,7 @@ use crate::tcp_service::handle_client_connection;
 
 mod chord;
 mod tcp_service;
+mod crypto;
 
 static DHT_PUT: u16 = 650;
 static DHT_GET: u16 = 651;
@@ -25,9 +22,11 @@ static DHT_FAILURE: u16 = 653;
 async fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::SimpleLogger::new().env().with_level(LevelFilter::Info).init().unwrap();
 
-    let grpc_addr = "127.0.0.1:50051".parse()?;
-    let tcp_addr = "127.0.0.1:50052";
+    let grpc_host: &str = "127.0.0.1";
+    let grpc_port = 50051;
 
+    let grpc_addr = format!("{}:{}", grpc_host, grpc_port).parse()?;
+    let tcp_addr = "127.0.0.1:50052";
 
 
     tokio::spawn(async move {
@@ -41,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     info!("Starting up gRPC service");
-    let chord_service = ChordService::default();
+    let chord_service = ChordService::new(grpc_host, grpc_port, 32);
     Server::builder()
         .add_service(ChordServer::new(chord_service))
         .serve(grpc_addr)
