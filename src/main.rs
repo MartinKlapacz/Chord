@@ -31,13 +31,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
             tokio::spawn(async move {
-                let size = socket.read_u16().await.unwrap();
-                let code = socket.read_u16().await.unwrap();
-                match code {
-                    code if code == DHT_PUT => handle_put(&mut socket, size).await,
-                    code if code == DHT_GET => handle_get(&mut socket).await,
-                    _ => panic!("invalid code")
-                }.unwrap();
+                loop {
+                    let size_res = socket.read_u16().await;
+                    let size = match size_res {
+                        Ok(size) => size,
+                        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                            println!("Client disconnected");
+                            0
+                        }
+                        _ => panic!("Unexpected Error")
+                    };
+                    if size == 0 {
+                        break;
+                    }
+                    let code = socket.read_u16().await.unwrap();
+                    match code {
+                        code if code == DHT_PUT => handle_put(&mut socket, size).await,
+                        code if code == DHT_GET => handle_get(&mut socket).await,
+                        _ => panic!("invalid code")
+                    }.unwrap();
+                }
             });
         }
     });
