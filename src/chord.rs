@@ -21,9 +21,8 @@ pub struct FingerEntry {
 
 
 impl ChordService {
-    pub fn new(host: &str, port: u16, m: usize) -> ChordService {
-        let url = format!("{}:{}", host, port);
-        let id = crypto::hash(url);
+    pub fn new(address: &String, m: usize) -> ChordService {
+        let id = crypto::hash(address);
 
         let mut finger_table = Vec::with_capacity(m);
         for i in 0..m {

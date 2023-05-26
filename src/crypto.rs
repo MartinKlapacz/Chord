@@ -2,7 +2,7 @@ use blake3::Hasher;
 
 pub type Key = u128;
 
-pub fn hash(input: String) -> Key {
+pub fn hash(input: &String) -> Key {
     let mut hasher = Hasher::new();
     hasher.update(input.as_bytes());
     let hash = hasher.finalize();
