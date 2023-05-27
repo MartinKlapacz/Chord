@@ -1,39 +1,29 @@
+use std::sync::{Arc, Mutex};
+use log::info;
+use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
+use crate::chord::chord_proto::FindSuccessorResponse;
 
 use crate::crypto;
 use crate::crypto::Key;
+use crate::finger_table::{FingerEntry, FingerTable};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
 }
 
-type NodeUrl = String;
+pub type NodeUrl = String;
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct ChordService {
-    finger_table: Vec<FingerEntry>,
-}
-
-pub struct FingerEntry {
-    key: Key,
-    url: NodeUrl,
+    finger_table: Arc<Mutex<FingerTable>>,
 }
 
 
 impl ChordService {
-    pub fn new(address: &String, m: usize) -> ChordService {
-        let id = crypto::hash(address);
-
-        let mut finger_table = Vec::with_capacity(m);
-        for i in 0..m {
-            let start = (id + 2u128.pow(i as u32)) % 2u128.pow(m as u32);
-            finger_table.push(FingerEntry {
-                key: start,
-                url: NodeUrl::default(),
-            });
-        };
-
-        ChordService { finger_table }
+    pub async fn new(rx: Receiver<FingerTable>) -> ChordService {
+        let finger_table = rx.await.unwrap();
+        ChordService { finger_table: Arc::new(Mutex::new(finger_table)) }
     }
 }
 
@@ -43,8 +33,10 @@ impl chord_proto::chord_server::Chord for ChordService {
         &self,
         request: Request<chord_proto::FindSuccessorRequest>,
     ) -> Result<Response<chord_proto::FindSuccessorResponse>, Status> {
-        // Implement the find_successor method here.
-        Err(Status::unimplemented("todo"))
+        info!("Received FindSuccessorRequest");
+        Ok(Response::new(FindSuccessorResponse{
+            address: format!("{}", self.finger_table.lock().unwrap().fingers.len()),
+        }))
     }
 
     async fn notify(
