@@ -4,9 +4,7 @@ use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 use crate::chord::chord_proto::FindSuccessorResponse;
 
-use crate::crypto;
-use crate::crypto::Key;
-use crate::finger_table::{FingerEntry, FingerTable};
+use crate::finger_table::FingerTable;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -33,7 +31,11 @@ impl chord_proto::chord_server::Chord for ChordService {
         &self,
         request: Request<chord_proto::FindSuccessorRequest>,
     ) -> Result<Response<chord_proto::FindSuccessorResponse>, Status> {
-        info!("Received FindSuccessorRequest");
+
+        let key = request.get_ref().id.clone();
+        info!("Received find successor call for {:?}", key);
+        // todo: get closest successor for key
+
         Ok(Response::new(FindSuccessorResponse{
             address: format!("{}", self.finger_table.lock().unwrap().fingers.len()),
         }))

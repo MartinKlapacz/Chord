@@ -35,42 +35,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     simple_logger::SimpleLogger::new().env().with_level(LevelFilter::Info).init().unwrap();
 
-    let tcp_addr = "127.0.0.1:50052";
+    let tcp_addr = args.tcp_address;
 
     let mut thread_handles = Vec::new();
 
     let peer_address_option = args.peer;
-    let grpc_addr1 = args.address.clone();
-    let grpc_addr2 = args.address.clone();
-    let finger_count = 32;
+    let cloned_grpc_addr_1 = args.grpc_address.clone();
+    let cloned_grpc_addr_2 = args.grpc_address.clone();
 
     let (tx, rx) = oneshot::channel();
 
     info!("Starting up finger table thread");
     thread_handles.push(tokio::spawn(async move {
-        let id = crypto::hash(&grpc_addr1);
+        let id = crypto::hash(&cloned_grpc_addr_1);
 
-        let mut finger_table = FingerTable::new(&id, 32);
+        let mut finger_table = FingerTable::new(&id);
 
         match peer_address_option {
             Some(peer_address) => {
                 info!("Joining an existing cluster");
-                let channel = Channel::from_static("http://127.0.0.1:50051")
-                    .connect()
+                let mut client = ChordClient::connect(format!("http://{}", peer_address))
                     .await
                     .unwrap();
-                let mut client = ChordClient::new(channel);
 
                 for finger in &mut finger_table.fingers {
+                    let bytes = finger.key.to_be_bytes().to_vec();
                     let response = client.find_successor(Request::new(FindSuccessorRequest {
-                        id: finger.key.to_be_bytes().to_vec(),
+                        id: bytes,
                     })).await.unwrap();
                     finger.url = response.get_ref().address.clone();
                 }
             }
             None => {
                 info!("Starting up a new cluster");
-                finger_table.set_all_fingers(&grpc_addr1);
+                finger_table.set_all_fingers(&cloned_grpc_addr_1);
             }
         };
         tx.send(finger_table).unwrap()
@@ -92,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let chord_service = ChordService::new(rx).await;
         Server::builder()
             .add_service(ChordServer::new(chord_service))
-            .serve(grpc_addr2.parse().unwrap())
+            .serve(cloned_grpc_addr_2.parse().unwrap())
             .await
             .unwrap();
     }));
