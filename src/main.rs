@@ -13,7 +13,7 @@ use tonic::transport::{Channel, Server};
 use crate::chord::{ChordService, NodeUrl};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::chord::chord_proto::chord_server::ChordServer;
-use crate::chord::chord_proto::FindSuccessorRequest;
+use crate::chord::chord_proto::{Empty, FindSuccessorRequest, GetPredecessorResponse};
 use crate::cli::Cli;
 use crate::finger_table::{FingerEntry, FingerTable};
 use crate::tcp_service::handle_client_connection;
@@ -50,10 +50,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let id = crypto::hash(&cloned_grpc_addr_1);
 
         let mut finger_table = FingerTable::new(&id);
+        let mut predecessor_url = cloned_grpc_addr_1.clone();
 
         match peer_address_option {
             Some(peer_address) => {
-                info!("Joining an existing cluster");
+                info!("Joining existing cluster");
                 let mut client = ChordClient::connect(format!("http://{}", peer_address))
                     .await
                     .unwrap();
@@ -65,13 +66,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     })).await.unwrap();
                     finger.url = response.get_ref().address.clone();
                 }
+                info!("Initialized finger table from peer");
+
+                let response = client.get_predecessor(Request::new(Empty{})).await.unwrap();
+                predecessor_url = response.get_ref().url.clone();
+                info!("Received predecessor from peer")
             }
             None => {
                 info!("Starting up a new cluster");
                 finger_table.set_all_fingers(&cloned_grpc_addr_1);
             }
         };
-        tx.send(finger_table).unwrap()
+        tx.send((finger_table, predecessor_url)).unwrap()
     }));
 
 

@@ -6,6 +6,18 @@ message FindSuccessorRequest {
   bytes id = 1;
 }
 
+message Empty {
+}
+
+message GetPredecessorResponse {
+  string url = 1;
+}
+
+
+message SetPredecessorRequest {
+  string url = 1;
+}
+
 message FindSuccessorResponse {
   string address = 1;
 }
@@ -14,12 +26,10 @@ message NotifyRequest {
   string address = 1;
 }
 
-message NotifyResponse {
-  // This message is intentionally left empty.
-}
 
 
 service Chord {
   rpc FindSuccessor (FindSuccessorRequest) returns (FindSuccessorResponse);
-  rpc Notify (NotifyRequest) returns (NotifyResponse);
+  rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
+  rpc Notify (NotifyRequest) returns (Empty);
 }
