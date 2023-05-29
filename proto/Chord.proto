@@ -3,7 +3,7 @@ syntax = "proto3";
 package chord;
 
 message FindSuccessorRequest {
-  int32 id = 1;
+  bytes id = 1;
 }
 
 message FindSuccessorResponse {
