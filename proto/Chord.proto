@@ -31,5 +31,6 @@ message NotifyRequest {
 service Chord {
   rpc FindSuccessor (FindSuccessorRequest) returns (FindSuccessorResponse);
   rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
+  rpc SetPredecessor (SetPredecessorRequest) returns (Empty);
   rpc Notify (NotifyRequest) returns (Empty);
 }

@@ -13,7 +13,7 @@ use tonic::transport::{Channel, Server};
 use crate::chord::{ChordService, NodeUrl};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::chord::chord_proto::chord_server::ChordServer;
-use crate::chord::chord_proto::{Empty, FindSuccessorRequest, GetPredecessorResponse};
+use crate::chord::chord_proto::{Empty, FindSuccessorRequest, GetPredecessorResponse, SetPredecessorRequest};
 use crate::cli::Cli;
 use crate::finger_table::{FingerEntry, FingerTable};
 use crate::tcp_service::handle_client_connection;
@@ -70,7 +70,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 let response = client.get_predecessor(Request::new(Empty{})).await.unwrap();
                 predecessor_url = response.get_ref().url.clone();
-                info!("Received predecessor from peer")
+                info!("Received predecessor from peer");
+
+                let _empty = client.set_predecessor(Request::new(SetPredecessorRequest {
+                    url: cloned_grpc_addr_1.clone()
+                })).await.unwrap();
+                info!("Updated predecessor of peer to this")
             }
             None => {
                 info!("Starting up a new cluster");

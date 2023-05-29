@@ -4,7 +4,7 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{Empty, FindSuccessorResponse, GetPredecessorResponse};
+use crate::chord::chord_proto::{Empty, FindSuccessorResponse, GetPredecessorResponse, SetPredecessorRequest};
 use crate::finger_table::FingerTable;
 
 pub mod chord_proto {
@@ -50,6 +50,15 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(GetPredecessorResponse {
             url: self.predecessor.lock().unwrap().clone()
         }))
+    }
+
+    async fn set_predecessor(&self, request: Request<SetPredecessorRequest>) -> Result<Response<Empty>, Status> {
+        let new_predecessor = request.get_ref().url.clone();
+        info!("Setting predecessor to {}", new_predecessor);
+
+        let mut predecessor = self.predecessor.lock().unwrap();
+        *predecessor = new_predecessor;
+        Ok(Response::new(Empty{}))
     }
 
 
