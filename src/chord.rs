@@ -4,7 +4,7 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{Empty, FindSuccessorResponse, GetPredecessorResponse, SetPredecessorRequest};
+use crate::chord::chord_proto::{Empty, FindSuccessorResponse, FingerTableMsg, GetPredecessorResponse, SetPredecessorRequest};
 use crate::finger_table::FingerTable;
 
 pub mod chord_proto {
@@ -68,5 +68,11 @@ impl chord_proto::chord_server::Chord for ChordService {
     ) -> Result<Response<chord_proto::Empty>, Status> {
         // Implement the notify method here.
         Err(Status::unimplemented("todo"))
+    }
+
+    async fn get_finger_table(&self, request: Request<Empty>) -> Result<Response<FingerTableMsg>, Status> {
+        let finger_table = self.finger_table.lock().unwrap();
+        let finger_table_msg: FingerTableMsg = FingerTableMsg::from(&*finger_table);
+        Ok(Response::new(finger_table_msg))
     }
 }

@@ -1,3 +1,4 @@
+use crate::chord::chord_proto::{FingerEntryMsg, FingerTableMsg};
 use crate::chord::NodeUrl;
 use crate::crypto::Key;
 
@@ -7,6 +8,13 @@ static FINGER_COUNT: u32 = 32;
 pub struct FingerTable {
     pub fingers: Vec<FingerEntry>,
 }
+
+#[derive(Debug)]
+pub struct FingerEntry {
+    pub(crate) key: Key,
+    pub(crate) url: NodeUrl,
+}
+
 
 impl FingerTable {
     pub fn new(key: &Key) -> FingerTable {
@@ -33,8 +41,22 @@ impl FingerTable {
 }
 
 
-#[derive(Debug)]
-pub struct FingerEntry {
-    pub(crate) key: Key,
-    pub(crate) url: NodeUrl,
+impl From<&FingerEntry> for FingerEntryMsg {
+    fn from(value: &FingerEntry) -> Self {
+        FingerEntryMsg {
+            key: value.key.to_le_bytes().to_vec(),
+            url: value.url.clone(),
+        }
+    }
 }
+
+
+impl From<&FingerTable> for FingerTableMsg {
+    fn from(value: &FingerTable) -> Self {
+        FingerTableMsg {
+            fingers: value.fingers.iter().map(Into::into).collect::<Vec<FingerEntryMsg>>()
+        }
+    }
+}
+
+

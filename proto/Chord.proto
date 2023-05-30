@@ -26,6 +26,18 @@ message NotifyRequest {
   string address = 1;
 }
 
+message NotifyResponse {
+}
+
+
+message FingerEntryMsg {
+  bytes key = 1;
+  string url = 2;
+}
+
+message FingerTableMsg {
+  repeated FingerEntryMsg fingers = 1;
+}
 
 
 service Chord {
@@ -33,4 +45,7 @@ service Chord {
   rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
   rpc SetPredecessor (SetPredecessorRequest) returns (Empty);
   rpc Notify (NotifyRequest) returns (Empty);
+
+  // debug
+  rpc GetFingerTable (Empty) returns (FingerTableMsg);
 }
