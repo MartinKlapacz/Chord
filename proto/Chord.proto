@@ -10,12 +10,12 @@ message Empty {
 }
 
 message GetPredecessorResponse {
-  string url = 1;
+  FingerEntryMsg predecessor = 1;
 }
 
 
 message SetPredecessorRequest {
-  string url = 1;
+  FingerEntryMsg predecessor = 1;
 }
 
 message FindSuccessorResponse {
