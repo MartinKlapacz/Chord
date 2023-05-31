@@ -1,14 +1,11 @@
-use std::arch::x86_64::_mm256_permute2f128_ps;
 use std::error::Error;
 
 use clap::Parser;
 use log::{info, LevelFilter};
-use tokio::io::AsyncWriteExt;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
-use tonic::{Request, Response, Status};
-use tonic::transport::{Channel, Server};
+use tonic::Request;
+use tonic::transport::Server;
 
 use crate::chord::{ChordService, NodeUrl};
 use crate::chord::chord_proto::{Empty, FindSuccessorRequest, GetPredecessorResponse, SetPredecessorRequest};
@@ -31,6 +28,9 @@ static DHT_GET: u16 = 651;
 static DHT_SUCCESS: u16 = 652;
 static DHT_FAILURE: u16 = 653;
 
+pub mod chord_proto {
+    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let tcp_addr = args.tcp_address;
 
-    let mut thread_handles: Vec<JoinHandle<()>> = Vec::new();
+    let mut thread_handles = Vec::new();
 
     let peer_address_option = args.peer;
     let cloned_grpc_addr_1 = args.grpc_address.clone();
@@ -67,9 +67,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up gRPC service");
     thread_handles.push(tokio::spawn(async move {
-        let chord_service = ChordService::new(rx).await;
+        let chord_service = ChordServer::new(ChordService::new(rx).await);
+
+        let reflection_service = tonic_reflection::server::Builder::configure()
+            .register_encoded_file_descriptor_set(chord_proto::FILE_DESCRIPTOR_SET)
+            .build()
+            .unwrap();
+
         Server::builder()
-            .add_service(ChordServer::new(chord_service))
+            .add_service(chord_service)
+            .add_service(reflection_service)
             .serve(cloned_grpc_addr_2.parse().unwrap())
             .await
             .unwrap();
