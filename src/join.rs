@@ -13,33 +13,42 @@ pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_add
     let id = crypto::hash(&own_grpc_address);
 
     let mut finger_table = FingerTable::new(&id);
-    let mut predecessor = FingerEntry::from((&own_grpc_address, &Key::default()));
+    let mut predecessor = FingerEntry::from((&own_grpc_address, &id));
 
     match peer_address_option {
         Some(peer_address) => {
             info!("Joining existing cluster");
-            let mut client = ChordClient::connect(format!("http://{}", peer_address))
+            let mut join_peer_client = ChordClient::connect(format!("http://{}", peer_address))
                 .await
                 .unwrap();
 
             for finger in &mut finger_table.fingers {
                 let bytes = finger.key.to_be_bytes().to_vec();
-                let response = client.find_successor(Request::new(FindSuccessorRequest {
+                let response = join_peer_client.find_successor(Request::new(FindSuccessorRequest {
                     id: bytes,
                 })).await.unwrap();
                 finger.url = response.get_ref().clone().successor.unwrap().url.clone();
             }
             info!("Initialized finger table from peer");
 
-            let response = client.get_predecessor(Request::new(Empty{})).await.unwrap();
-            let predecessor_msg = response.get_ref().clone().predecessor.unwrap();
+            let direct_successor_url = finger_table.fingers.first().unwrap().url.clone();
+            let mut direct_successor_client = ChordClient::connect(format!("http://{}", direct_successor_url))
+                .await
+                .unwrap();
+
+            let get_predecessor_response = direct_successor_client.get_predecessor(Request::new(Empty{})).await.unwrap();
+            let predecessor_msg = get_predecessor_response.get_ref().clone().predecessor.unwrap();
             predecessor = predecessor_msg.clone().into();
+
             info!("Received predecessor from peer");
 
-            let _empty = client.set_predecessor(Request::new(SetPredecessorRequest {
-                predecessor: Some(predecessor_msg)
+            let _empty = direct_successor_client.set_predecessor(Request::new(SetPredecessorRequest {
+                predecessor: Some(FingerEntryMsg {
+                    key: id.to_be_bytes().to_vec(),
+                    url: own_grpc_address,
+                })
             })).await.unwrap();
-            info!("Updated predecessor of {} to: {}", peer_address, predecessor.url)
+            info!("Updated predecessor of {} to this", peer_address)
         }
         None => {
             info!("Starting up a new cluster");

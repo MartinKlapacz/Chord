@@ -47,7 +47,8 @@ message FingerInfoMsg {
 message NodeInfoResponse {
   string url = 1;
   string id = 2;
-  repeated FingerInfoMsg fingerInfo = 3;
+  FingerInfoMsg predecessor = 3;
+  repeated FingerInfoMsg fingerInfos = 4;
 }
 
 

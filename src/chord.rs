@@ -37,8 +37,31 @@ impl ChordService {
         }
     }
 
-    async fn find_successor_helper(&self, id: &Vec<u8>) -> Result<(Vec<u8>, String), Box<dyn Error>> {
-        Ok((Vec::new(), String::default()))
+    pub fn is_successor_of_key(&self, key: Key) -> bool {
+        let predecessor_position = self.predecessor.lock().unwrap().key.clone();
+        let own_position = self.key.clone();
+
+        if predecessor_position < own_position {
+            return predecessor_position < key && key <= own_position;
+        } else if predecessor_position > own_position {
+            return predecessor_position < key || key <= own_position;
+        } else {
+            return true
+        }
+    }
+
+    async fn find_successor_helper(&self, id: Key) -> Result<(Vec<u8>, String), Box<dyn Error>> {
+        let all_fingers = &self.finger_table.lock().unwrap().fingers;
+        let successor_fingers: Vec<FingerEntry> = all_fingers.iter()
+            .filter(|finger| id <= finger.key)
+            .map(|finger| finger.clone())
+            .collect();
+        let closest_successor = match successor_fingers.is_empty() {
+            true => all_fingers.first().unwrap().clone(),
+            false => successor_fingers.first().unwrap().clone()
+        };
+
+        Ok((closest_successor.key.to_be_bytes().to_vec(), closest_successor.url))
     }
 }
 
@@ -51,10 +74,23 @@ impl chord_proto::chord_server::Chord for ChordService {
         let key = request.get_ref().id.clone();
         info!("Received find successor call for {:?}", key);
         // todo: get closest successor for key
-        let (key, url) = self.find_successor_helper(&key).await.unwrap();
 
-        let successor = FingerEntryMsg { key, url };
-        Ok(Response::new(FindSuccessorResponse { successor: Some(successor) }))
+        let key = Key::from_be_bytes(key.clone().try_into().unwrap());
+
+        if self.is_successor_of_key(key) {
+            let finger_entry_msg = FingerEntryMsg {
+                key: self.key.to_be_bytes().to_vec(),
+                url: self.url.clone(),
+            };
+            Ok(Response::new(FindSuccessorResponse {
+                successor: Some(finger_entry_msg)
+            }))
+        } else {
+            let (key, url) = self.find_successor_helper(key).await.unwrap();
+
+            let successor = FingerEntryMsg { key, url };
+            Ok(Response::new(FindSuccessorResponse { successor: Some(successor) }))
+        }
     }
 
 
@@ -78,8 +114,9 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn find_predecessor(&self, request: Request<FindPredecessorRequest>) -> Result<Response<FindPredecessorResponse>, Status> {
         let id = request.get_ref().id.clone();
+        let id = Key::from_be_bytes(id.try_into().unwrap());
 
-        let (_, url) = self.find_successor_helper(&id).await.unwrap();
+        let (_, url) = self.find_successor_helper(id).await.unwrap();
 
         let mut client = ChordClient::connect(format!("http://{}", url))
             .await
@@ -105,11 +142,13 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_node_info(&self, _: Request<Empty>) -> Result<Response<NodeInfoResponse>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
+        let predecessor = self.predecessor.lock().unwrap().clone();
 
         Ok(Response::new(NodeInfoResponse {
             url: self.url.clone(),
             id: self.key.to_be_bytes().iter().map(|byte| byte.to_string()).collect::<Vec<String>>().join(" "),
-            finger_info: finger_table_guard.fingers.iter()
+            predecessor: Some(predecessor.into()),
+            finger_infos: finger_table_guard.fingers.iter()
                 .map(|finger| finger.clone())
                 .map(|finger| finger.into())
                 .collect(),
