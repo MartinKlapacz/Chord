@@ -27,7 +27,7 @@ pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_add
                 let response = client.find_successor(Request::new(FindSuccessorRequest {
                     id: bytes,
                 })).await.unwrap();
-                finger.url = response.get_ref().address.clone();
+                finger.url = response.get_ref().clone().successor.unwrap().url.clone();
             }
             info!("Initialized finger table from peer");
 
@@ -39,7 +39,7 @@ pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_add
             let _empty = client.set_predecessor(Request::new(SetPredecessorRequest {
                 predecessor: Some(predecessor_msg)
             })).await.unwrap();
-            info!("Updated predecessor of peer to: {}", predecessor.url)
+            info!("Updated predecessor of {} to: {}", peer_address, predecessor.url)
         }
         None => {
             info!("Starting up a new cluster");

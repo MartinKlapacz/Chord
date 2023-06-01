@@ -1,10 +1,13 @@
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{Empty, FindSuccessorResponse, FingerEntryMsg, FingerTableMsg, GetPredecessorResponse, SetPredecessorRequest};
+use crate::chord::chord_proto::{Empty, FindPredecessorRequest, FindPredecessorResponse, FindSuccessorRequest, FindSuccessorResponse, FingerEntryMsg, FingerTableMsg, GetPredecessorResponse, SetPredecessorRequest};
+use crate::chord::chord_proto::chord_client::ChordClient;
+use crate::crypto::Key;
 use crate::finger_table::{FingerEntry, FingerTable};
 
 pub mod chord_proto {
@@ -28,6 +31,10 @@ impl ChordService {
             predecessor: Arc::new(Mutex::new(predecessor)),
         }
     }
+
+    async fn find_successor_helper(&self, id: &Vec<u8>) -> Result<(Vec<u8>, String), Box<dyn Error>> {
+        Ok((Vec::new(), String::default()))
+    }
 }
 
 #[tonic::async_trait]
@@ -39,11 +46,12 @@ impl chord_proto::chord_server::Chord for ChordService {
         let key = request.get_ref().id.clone();
         info!("Received find successor call for {:?}", key);
         // todo: get closest successor for key
+        let (key, url) = self.find_successor_helper(&key).await.unwrap();
 
-        Ok(Response::new(FindSuccessorResponse {
-            address: format!("{}", self.finger_table.lock().unwrap().fingers.len()),
-        }))
+        let successor = FingerEntryMsg { key, url };
+        Ok(Response::new(FindSuccessorResponse { successor: Some(successor) }))
     }
+
 
     async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<GetPredecessorResponse>, Status> {
         info!("Received get predecessor call");
@@ -61,6 +69,24 @@ impl chord_proto::chord_server::Chord for ChordService {
         let mut predecessor = self.predecessor.lock().unwrap();
         *predecessor = new_predecessor;
         Ok(Response::new(Empty {}))
+    }
+
+    async fn find_predecessor(&self, request: Request<FindPredecessorRequest>) -> Result<Response<FindPredecessorResponse>, Status> {
+        let id = request.get_ref().id.clone();
+
+        let (_, url) = self.find_successor_helper(&id).await.unwrap();
+
+        let mut client = ChordClient::connect(format!("http://{}", url))
+            .await
+            .unwrap();
+
+        let predecessor = client.get_predecessor(Request::new(
+            Empty {}
+        )).await.unwrap().get_ref().clone().predecessor.unwrap();
+
+        Ok(Response::new(FindPredecessorResponse {
+            predecessor: Some(predecessor)
+        }))
     }
 
 

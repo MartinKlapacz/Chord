@@ -19,7 +19,7 @@ message SetPredecessorRequest {
 }
 
 message FindSuccessorResponse {
-  string address = 1;
+  FingerEntryMsg successor = 1;
 }
 
 message NotifyRequest {
@@ -39,12 +39,21 @@ message FingerTableMsg {
   repeated FingerEntryMsg fingers = 1;
 }
 
+message FindPredecessorRequest {
+  bytes id = 1;
+}
+
+message FindPredecessorResponse {
+  FingerEntryMsg predecessor = 1;
+}
 
 service Chord {
   rpc FindSuccessor (FindSuccessorRequest) returns (FindSuccessorResponse);
   rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
   rpc SetPredecessor (SetPredecessorRequest) returns (Empty);
   rpc Notify (NotifyRequest) returns (Empty);
+
+  rpc FindPredecessor (FindPredecessorRequest) returns (FindPredecessorResponse);
 
   // debug
   rpc GetFingerTable (Empty) returns (FingerTableMsg);
