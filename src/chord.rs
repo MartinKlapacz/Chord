@@ -5,7 +5,7 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{Empty, FindPredecessorRequest, FindPredecessorResponse, FindSuccessorRequest, FindSuccessorResponse, FingerEntryMsg, FingerInfoMsg, FingerTableMsg, GetPredecessorResponse, NodeInfoResponse, SetPredecessorRequest};
+use crate::chord::chord_proto::{Empty, FingerInfoMsg, FingerTableMsg, NodeInfo, NodeMsg};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::Key;
@@ -46,22 +46,22 @@ impl ChordService {
         } else if predecessor_position > own_position {
             return predecessor_position < key || key <= own_position;
         } else {
-            return true
+            return true;
         }
     }
 
-    async fn find_successor_helper(&self, id: Key) -> Result<(Vec<u8>, String), Box<dyn Error>> {
+    async fn find_successor_helper(&self, id: Key) -> Result<FingerEntry, Box<dyn Error>> {
         let all_fingers = &self.finger_table.lock().unwrap().fingers;
         let successor_fingers: Vec<FingerEntry> = all_fingers.iter()
             .filter(|finger| id <= finger.key)
             .map(|finger| finger.clone())
             .collect();
-        let closest_successor = match successor_fingers.is_empty() {
-            true => all_fingers.first().unwrap().clone(),
-            false => successor_fingers.first().unwrap().clone()
-        };
+        let closest_successor_finger = match successor_fingers.is_empty() {
+            true => all_fingers.first(),
+            false => successor_fingers.first()
+        }.unwrap().clone();
 
-        Ok((closest_successor.key.to_be_bytes().to_vec(), closest_successor.url))
+        Ok(closest_successor_finger)
     }
 }
 
@@ -69,82 +69,54 @@ impl ChordService {
 impl chord_proto::chord_server::Chord for ChordService {
     async fn find_successor(
         &self,
-        request: Request<chord_proto::FindSuccessorRequest>,
-    ) -> Result<Response<chord_proto::FindSuccessorResponse>, Status> {
-        let key = request.get_ref().id.clone();
-        info!("Received find successor call for {:?}", key);
-        // todo: get closest successor for key
+        request: Request<chord_proto::NodeMsg>,
+    ) -> Result<Response<chord_proto::NodeMsg>, Status> {
+        let finger_entry: FingerEntry = request.get_ref().into();
+        info!("Received find successor call for {:?}", finger_entry);
 
-        let key = Key::from_be_bytes(key.clone().try_into().unwrap());
-
-        if self.is_successor_of_key(key) {
-            let finger_entry_msg = FingerEntryMsg {
-                key: self.key.to_be_bytes().to_vec(),
-                url: self.url.clone(),
-            };
-            Ok(Response::new(FindSuccessorResponse {
-                successor: Some(finger_entry_msg)
-            }))
+        if self.is_successor_of_key(finger_entry.key) {
+            Ok(Response::new(self.url.clone().into()))
         } else {
-            let (key, url) = self.find_successor_helper(key).await.unwrap();
-
-            let successor = FingerEntryMsg { key, url };
-            Ok(Response::new(FindSuccessorResponse { successor: Some(successor) }))
+            let looked_up_finger_entry = self.find_successor_helper(finger_entry.key).await.unwrap();
+            Ok(Response::new(looked_up_finger_entry.into()))
         }
     }
 
 
-    async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<GetPredecessorResponse>, Status> {
+    async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<NodeMsg>, Status> {
         info!("Received get predecessor call");
         let finger_entry = self.predecessor.lock().unwrap();
-        Ok(Response::new(GetPredecessorResponse {
-            predecessor: Some(finger_entry.clone().into())
-        }))
+        Ok(Response::new(finger_entry.clone().into()))
     }
 
-    async fn set_predecessor(&self, request: Request<SetPredecessorRequest>) -> Result<Response<Empty>, Status> {
-        let new_predecessor_msg = request.get_ref().clone().predecessor.unwrap();
-        let new_predecessor: FingerEntry = new_predecessor_msg.into();
+    async fn set_predecessor(&self, request: Request<NodeMsg>) -> Result<Response<Empty>, Status> {
+        let new_predecessor: FingerEntry = request.get_ref().into();
 
-        info!("Setting predecessor to {}", new_predecessor.url);
+        info!("Setting predecessor to {:?}", new_predecessor);
         let mut predecessor = self.predecessor.lock().unwrap();
         *predecessor = new_predecessor;
         Ok(Response::new(Empty {}))
     }
 
-    async fn find_predecessor(&self, request: Request<FindPredecessorRequest>) -> Result<Response<FindPredecessorResponse>, Status> {
-        let id = request.get_ref().id.clone();
-        let id = Key::from_be_bytes(id.try_into().unwrap());
-
-        let (_, url) = self.find_successor_helper(id).await.unwrap();
-
-        let mut client = ChordClient::connect(format!("http://{}", url))
+    async fn find_predecessor(&self, request: Request<NodeMsg>) -> Result<Response<NodeMsg>, Status> {
+        let successor_finger_entry = self.find_successor_helper(request.get_ref().into()).await.unwrap();
+        let mut client = ChordClient::connect(format!("http://{}", successor_finger_entry.url))
             .await
             .unwrap();
 
         let predecessor = client.get_predecessor(Request::new(
             Empty {}
-        )).await.unwrap().get_ref().clone().predecessor.unwrap();
+        )).await.unwrap().get_ref().clone();
 
-        Ok(Response::new(FindPredecessorResponse {
-            predecessor: Some(predecessor)
-        }))
+        Ok(Response::new(predecessor))
     }
 
 
-    async fn notify(
-        &self,
-        request: Request<chord_proto::NotifyRequest>,
-    ) -> Result<Response<chord_proto::Empty>, Status> {
-        // Implement the notify method here.
-        Err(Status::unimplemented("todo"))
-    }
-
-    async fn get_node_info(&self, _: Request<Empty>) -> Result<Response<NodeInfoResponse>, Status> {
+    async fn get_node_info(&self, _: Request<Empty>) -> Result<Response<NodeInfo>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
         let predecessor = self.predecessor.lock().unwrap().clone();
 
-        Ok(Response::new(NodeInfoResponse {
+        Ok(Response::new(NodeInfo {
             url: self.url.clone(),
             id: self.key.to_be_bytes().iter().map(|byte| byte.to_string()).collect::<Vec<String>>().join(" "),
             predecessor: Some(predecessor.into()),

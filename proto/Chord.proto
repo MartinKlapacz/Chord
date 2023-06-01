@@ -2,41 +2,19 @@ syntax = "proto3";
 
 package chord;
 
-message FindSuccessorRequest {
-  bytes id = 1;
+message NodeMsg {
+  string url = 1;
 }
 
 message Empty {
-}
-
-message GetPredecessorResponse {
-  FingerEntryMsg predecessor = 1;
-}
-
-
-message SetPredecessorRequest {
-  FingerEntryMsg predecessor = 1;
-}
-
-message FindSuccessorResponse {
-  FingerEntryMsg successor = 1;
 }
 
 message NotifyRequest {
   string address = 1;
 }
 
-message NotifyResponse {
-}
-
-
-message FingerEntryMsg {
-  bytes key = 1;
-  string url = 2;
-}
-
 message FingerTableMsg {
-  repeated FingerEntryMsg fingers = 1;
+  repeated NodeMsg fingers = 1;
 }
 
 message FingerInfoMsg {
@@ -44,7 +22,7 @@ message FingerInfoMsg {
   string url = 2;
 }
 
-message NodeInfoResponse {
+message NodeInfo {
   string url = 1;
   string id = 2;
   FingerInfoMsg predecessor = 3;
@@ -52,22 +30,13 @@ message NodeInfoResponse {
 }
 
 
-message FindPredecessorRequest {
-  bytes id = 1;
-}
-
-message FindPredecessorResponse {
-  FingerEntryMsg predecessor = 1;
-}
 
 service Chord {
-  rpc FindSuccessor (FindSuccessorRequest) returns (FindSuccessorResponse);
-  rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
-  rpc SetPredecessor (SetPredecessorRequest) returns (Empty);
-  rpc Notify (NotifyRequest) returns (Empty);
-
-  rpc FindPredecessor (FindPredecessorRequest) returns (FindPredecessorResponse);
+  rpc FindSuccessor (NodeMsg) returns (NodeMsg);
+  rpc FindPredecessor (NodeMsg) returns (NodeMsg);
+  rpc GetPredecessor (Empty) returns (NodeMsg);
+  rpc SetPredecessor (NodeMsg) returns (Empty);
 
   // debug
-  rpc GetNodeInfo (Empty) returns (NodeInfoResponse);
+  rpc GetNodeInfo (Empty) returns (NodeInfo);
 }

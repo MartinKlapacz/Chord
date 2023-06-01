@@ -4,12 +4,9 @@ use clap::Parser;
 use log::{info, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tonic::Request;
 use tonic::transport::Server;
 
 use crate::chord::{ChordService, NodeUrl};
-use crate::chord::chord_proto::{Empty, FindSuccessorRequest, GetPredecessorResponse, SetPredecessorRequest};
-use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::chord::chord_proto::chord_server::ChordServer;
 use crate::cli::Cli;
 use crate::finger_table::{FingerEntry, FingerTable};
