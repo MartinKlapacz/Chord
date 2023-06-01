@@ -5,8 +5,9 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{Empty, FindPredecessorRequest, FindPredecessorResponse, FindSuccessorRequest, FindSuccessorResponse, FingerEntryMsg, FingerTableMsg, GetPredecessorResponse, SetPredecessorRequest};
+use crate::chord::chord_proto::{Empty, FindPredecessorRequest, FindPredecessorResponse, FindSuccessorRequest, FindSuccessorResponse, FingerEntryMsg, FingerInfoMsg, FingerTableMsg, GetPredecessorResponse, NodeInfoResponse, SetPredecessorRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
+use crate::crypto;
 use crate::crypto::Key;
 use crate::finger_table::{FingerEntry, FingerTable};
 
@@ -18,15 +19,19 @@ pub type NodeUrl = String;
 
 #[derive(Debug)]
 pub struct ChordService {
+    url: String,
+    key: Key,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor: Arc<Mutex<FingerEntry>>,
 }
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(FingerTable, FingerEntry)>) -> ChordService {
+    pub async fn new(rx: Receiver<(FingerTable, FingerEntry)>, url: &String) -> ChordService {
         let (finger_table, predecessor) = rx.await.unwrap();
         ChordService {
+            url: url.clone(),
+            key: crypto::hash(&url),
             finger_table: Arc::new(Mutex::new(finger_table)),
             predecessor: Arc::new(Mutex::new(predecessor)),
         }
@@ -98,9 +103,16 @@ impl chord_proto::chord_server::Chord for ChordService {
         Err(Status::unimplemented("todo"))
     }
 
-    async fn get_finger_table(&self, request: Request<Empty>) -> Result<Response<FingerTableMsg>, Status> {
+    async fn get_node_info(&self, _: Request<Empty>) -> Result<Response<NodeInfoResponse>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
-        let finger_table_msg: FingerTableMsg = finger_table_guard.clone().into();
-        Ok(Response::new(finger_table_msg))
+
+        Ok(Response::new(NodeInfoResponse {
+            url: self.url.clone(),
+            id: self.key.to_be_bytes().iter().map(|byte| byte.to_string()).collect::<Vec<String>>().join(" "),
+            finger_info: finger_table_guard.fingers.iter()
+                .map(|finger| finger.clone())
+                .map(|finger| finger.into())
+                .collect(),
+        }))
     }
 }

@@ -39,6 +39,18 @@ message FingerTableMsg {
   repeated FingerEntryMsg fingers = 1;
 }
 
+message FingerInfoMsg {
+  string id = 1;
+  string url = 2;
+}
+
+message NodeInfoResponse {
+  string url = 1;
+  string id = 2;
+  repeated FingerInfoMsg fingerInfo = 3;
+}
+
+
 message FindPredecessorRequest {
   bytes id = 1;
 }
@@ -56,5 +68,5 @@ service Chord {
   rpc FindPredecessor (FindPredecessorRequest) returns (FindPredecessorResponse);
 
   // debug
-  rpc GetFingerTable (Empty) returns (FingerTableMsg);
+  rpc GetNodeInfo (Empty) returns (NodeInfoResponse);
 }

@@ -1,11 +1,11 @@
+use std::fmt::{Debug, Formatter};
 use std::io::Read;
+use std::mem;
 
-use crate::chord::chord_proto::{FingerEntryMsg, FingerTableMsg};
+use crate::chord::chord_proto::{FingerEntryMsg, FingerInfoMsg, FingerTableMsg};
 use crate::chord::NodeUrl;
 use crate::crypto;
-use crate::crypto::Key;
-
-static FINGER_COUNT: u32 = 32;
+use crate::crypto::{HashRingKey, Key};
 
 #[derive(Debug, Clone)]
 pub struct FingerTable {
@@ -45,6 +45,17 @@ impl From<(&NodeUrl, &Key)> for FingerEntry {
     }
 }
 
+impl Into<FingerInfoMsg> for FingerEntry {
+    fn into(self) -> FingerInfoMsg {
+        let id = self.key.to_be_bytes().iter()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<String>>()
+            .join(" ");
+        FingerInfoMsg { id, url: self.url }
+    }
+}
+
+
 // impl From<&FingerEntryMsg> for FingerEntry {
 //     fn from(finger_entry: &FingerEntryMsg) -> Self {
 //         let mut bytes = [0u8; 16];
@@ -58,10 +69,10 @@ impl From<(&NodeUrl, &Key)> for FingerEntry {
 
 impl Into<FingerEntry> for FingerEntryMsg {
     fn into(self) -> FingerEntry {
-        let mut bytes = [0u8; 16];
+        let mut bytes = [0u8; mem::size_of::<Key>()];
         bytes.copy_from_slice(self.key.clone().as_slice());
         FingerEntry {
-            key: u128::from_le_bytes(bytes),
+            key: Key::from_le_bytes(bytes),
             url: self.url.clone(),
         }
     }
@@ -79,10 +90,10 @@ impl Into<FingerEntryMsg> for FingerEntry {
 impl FingerTable {
     pub fn new(key: &Key) -> FingerTable {
         let mut fingers = Vec::new();
-        for i in 0..FINGER_COUNT {
+        for i in 0..Key::finger_count() {
             fingers.push(FingerEntry {
                 // key: (key + 2u128.pow(i as u32)) % 2u128.pow(finger_count as u32),
-                key: key.overflowing_add(1u128.overflowing_shl(i as u32).0).0,
+                key: key.overflowing_add(Key::one().overflowing_shl(i as u32).0).0,
                 url: NodeUrl::default(),
             });
         };

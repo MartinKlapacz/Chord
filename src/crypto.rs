@@ -1,11 +1,36 @@
+use std::hash::Hash;
+use std::mem;
+use std::mem::size_of;
+
 use blake3::Hasher;
 
-pub type Key = u128;
+pub type Key = u8;
+
+
+pub trait HashRingKey {
+    fn size() -> usize;
+    fn one() -> Key;
+    fn finger_count() -> usize;
+}
+
+impl HashRingKey for Key {
+    fn size() -> usize {
+        mem::size_of::<Key>()
+    }
+
+    fn finger_count() -> usize {
+        Key::size() * 8
+    }
+
+    fn one() -> Key {
+        Key::default() + 1
+    }
+}
 
 pub fn hash(input: &String) -> Key {
     let mut hasher = Hasher::new();
     hasher.update(input.as_bytes());
     let hash = hasher.finalize();
     let bytes = *hash.as_bytes();
-    u128::from_le_bytes(bytes[0..16].try_into().unwrap())
+    Key::from_le_bytes(bytes[0..Key::size()].try_into().unwrap())
 }
