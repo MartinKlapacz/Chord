@@ -9,11 +9,11 @@ use crate::chord::chord_proto::{Empty, AddressMsg, };
 use crate::crypto;
 use crate::finger_table::{FingerEntry, FingerTable};
 
-pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address: String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
-    let id = crypto::hash(&own_grpc_address);
+pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
+    let id = crypto::hash(&own_grpc_address_str);
 
-    let mut finger_table = FingerTable::new(&id, &own_grpc_address);
-    let mut predecessor: AddressMsg = own_grpc_address.clone().into();
+    let mut finger_table = FingerTable::new(&id, &own_grpc_address_str);
+    let mut predecessor: AddressMsg = own_grpc_address_str.clone().into();
 
     match peer_address_option {
         Some(peer_address_str) => {
@@ -38,12 +38,13 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             predecessor = get_predecessor_response.get_ref().clone().into();
             info!("Received predecessor from peer");
 
-            let _empty = direct_successor_client.set_predecessor(Request::new(predecessor.clone().address.into()))
+            let data = direct_successor_client.set_predecessor(Request::new((&own_grpc_address_str).into()))
                 .await
                 .unwrap();
-            // todo: the the predecessor update right before the data handoff
+
+            // todo: store data and make available to grpc service
             let finger_entry_peer: FingerEntry = peer_address_str.into();
-            let finger_entry_this: FingerEntry = own_grpc_address.into();
+            let finger_entry_this: FingerEntry = own_grpc_address_str.into();
             info!("Updated predecessor of {:?} to {:?}", finger_entry_peer, finger_entry_this);
 
             // for finger in &finger_table.fingers {
@@ -55,7 +56,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
         }
         None => {
             info!("Starting up a new cluster");
-            finger_table.set_all_fingers(&own_grpc_address);
+            finger_table.set_all_fingers(&own_grpc_address_str);
         }
     };
 

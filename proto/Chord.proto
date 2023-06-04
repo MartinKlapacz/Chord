@@ -29,13 +29,16 @@ message NodeSummaryMsg {
   repeated FingerEntryMsg fingerEntries = 4;
 }
 
+message Data {
+  // todo
+}
 
 
 service Chord {
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
   rpc FindPredecessor (KeyMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
-  rpc SetPredecessor (AddressMsg) returns (Empty);
+  rpc SetPredecessor (AddressMsg) returns (Data);
 
   // debug
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);

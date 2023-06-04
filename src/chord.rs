@@ -5,7 +5,7 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg};
+use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::Key;
@@ -101,13 +101,13 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(finger_entry.clone().into()))
     }
 
-    async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Empty>, Status> {
+    async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Data>, Status> {
         let new_predecessor: FingerEntry = request.get_ref().into();
 
         info!("Setting predecessor to {:?}", new_predecessor);
         let mut predecessor = self.predecessor.lock().unwrap();
         *predecessor = new_predecessor;
-        Ok(Response::new(Empty {}))
+        Ok(Response::new(Data {}))
     }
 
 
