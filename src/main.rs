@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
 
-use crate::chord::{ChordService, NodeUrl};
+use crate::chord::{ChordService, Address};
 use crate::chord::chord_proto::chord_server::ChordServer;
 use crate::cli::Cli;
 use crate::finger_table::{FingerEntry, FingerTable};

@@ -1,36 +1,36 @@
 use std::error::Error;
+use std::ops::Add;
 use log::info;
 use tokio::sync::oneshot::Sender;
 use tonic::Request;
+use crate::chord::Address;
 use crate::chord::chord_proto::chord_client::ChordClient;
-use crate::chord::chord_proto::{Empty, NodeMsg};
-use crate::chord::NodeUrl;
+use crate::chord::chord_proto::{Empty, AddressMsg, };
 use crate::crypto;
-use crate::crypto::Key;
 use crate::finger_table::{FingerEntry, FingerTable};
 
-pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_address: String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
+pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address: String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
     let id = crypto::hash(&own_grpc_address);
 
     let mut finger_table = FingerTable::new(&id, &own_grpc_address);
-    let mut predecessor: FingerEntry = own_grpc_address.clone().into();
+    let mut predecessor: AddressMsg = own_grpc_address.clone().into();
 
     match peer_address_option {
-        Some(peer_address) => {
+        Some(peer_address_str) => {
             info!("Joining existing cluster");
-            let mut join_peer_client = ChordClient::connect(format!("http://{}", peer_address))
+            let mut join_peer_client = ChordClient::connect(format!("http://{}", peer_address_str))
                 .await
                 .unwrap();
 
             for finger in &mut finger_table.fingers {
-                let response = join_peer_client.find_successor(Request::new(finger.clone().into()))
+                let response = join_peer_client.find_successor(Request::new(finger.into()))
                     .await
                     .unwrap();
-                finger.url = response.get_ref().clone().url;
+                finger.address = response.get_ref().clone().into();
             }
             info!("Initialized finger table from peer");
 
-            let direct_successor_url = finger_table.fingers.first().unwrap().url.clone();
+            let direct_successor_url = finger_table.fingers.first().unwrap().address.clone();
             let mut direct_successor_client = ChordClient::connect(format!("http://{}", direct_successor_url))
                 .await
                 .unwrap();
@@ -38,10 +38,20 @@ pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_add
             predecessor = get_predecessor_response.get_ref().clone().into();
             info!("Received predecessor from peer");
 
-            let _empty = direct_successor_client.set_predecessor(Request::new(predecessor.clone().url.into()))
+            let _empty = direct_successor_client.set_predecessor(Request::new(predecessor.clone().address.into()))
                 .await
                 .unwrap();
-            info!("Updated predecessor of {} to this", peer_address)
+            // todo: the the predecessor update right before the data handoff
+            let finger_entry_peer: FingerEntry = peer_address_str.into();
+            let finger_entry_this: FingerEntry = own_grpc_address.into();
+            info!("Updated predecessor of {:?} to {:?}", finger_entry_peer, finger_entry_this);
+
+            // for finger in &finger_table.fingers {
+            //     join_peer_client.find_predecessor(NodeMsg {
+            //         url: "".to_string(),
+            //     })
+            // }
+            info!("Updated other nodes")
         }
         None => {
             info!("Starting up a new cluster");
@@ -49,6 +59,6 @@ pub async fn process_node_join(peer_address_option: Option<String>, own_grpc_add
         }
     };
 
-    tx.send((finger_table, predecessor)).unwrap();
+    tx.send((finger_table, predecessor.into())).unwrap();
     Ok(())
 }

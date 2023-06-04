@@ -2,41 +2,41 @@ syntax = "proto3";
 
 package chord;
 
-message NodeMsg {
-  string url = 1;
-}
-
 message Empty {
 }
 
-message NotifyRequest {
+message AddressMsg {
   string address = 1;
 }
 
+message KeyMsg {
+  bytes key = 1;
+}
+
 message FingerTableMsg {
-  repeated NodeMsg fingers = 1;
+  repeated AddressMsg fingers = 1;
 }
 
-message FingerInfoMsg {
-  string id = 1;
-  string url = 2;
+message FingerEntryMsg {
+  bytes id = 1;
+  string address = 2;
 }
 
-message NodeInfo {
+message NodeSummaryMsg {
   string url = 1;
   string id = 2;
-  FingerInfoMsg predecessor = 3;
-  repeated FingerInfoMsg fingerInfos = 4;
+  FingerEntryMsg predecessor = 3;
+  repeated FingerEntryMsg fingerEntries = 4;
 }
 
 
 
 service Chord {
-  rpc FindSuccessor (NodeMsg) returns (NodeMsg);
-  rpc FindPredecessor (NodeMsg) returns (NodeMsg);
-  rpc GetPredecessor (Empty) returns (NodeMsg);
-  rpc SetPredecessor (NodeMsg) returns (Empty);
+  rpc FindSuccessor (KeyMsg) returns (AddressMsg);
+  rpc FindPredecessor (KeyMsg) returns (AddressMsg);
+  rpc GetPredecessor (Empty) returns (AddressMsg);
+  rpc SetPredecessor (AddressMsg) returns (Empty);
 
   // debug
-  rpc GetNodeInfo (Empty) returns (NodeInfo);
+  rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
 }
