@@ -5,14 +5,15 @@ use tokio::sync::oneshot::Sender;
 use tonic::Request;
 use crate::chord::Address;
 use crate::chord::chord_proto::chord_client::ChordClient;
-use crate::chord::chord_proto::{Empty, AddressMsg, };
+use crate::chord::chord_proto::{Empty, AddressMsg, UpdateFingerTableEntryRequest};
 use crate::crypto;
+use crate::crypto::{HashRingKey, Key};
 use crate::finger_table::{FingerEntry, FingerTable};
 
-pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
-    let id = crypto::hash(&own_grpc_address_str);
+pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>>{
+    let own_id = crypto::hash(own_grpc_address_str);
 
-    let mut finger_table = FingerTable::new(&id, &own_grpc_address_str);
+    let mut finger_table = FingerTable::new(&own_id, own_grpc_address_str);
     let mut predecessor: AddressMsg = own_grpc_address_str.clone().into();
 
     match peer_address_option {
@@ -38,20 +39,32 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             predecessor = get_predecessor_response.get_ref().clone().into();
             info!("Received predecessor from peer");
 
-            let data = direct_successor_client.set_predecessor(Request::new((&own_grpc_address_str).into()))
+            let data = direct_successor_client.set_predecessor(Request::new(own_grpc_address_str.into()))
                 .await
                 .unwrap();
 
             // todo: store data and make available to grpc service
             let finger_entry_peer: FingerEntry = peer_address_str.into();
             let finger_entry_this: FingerEntry = own_grpc_address_str.into();
-            info!("Updated predecessor of {:?} to {:?}", finger_entry_peer, finger_entry_this);
+            info!("Updated predecessor of {:?} to {:?}", &finger_entry_peer, &finger_entry_this);
 
-            // for finger in &finger_table.fingers {
-            //     join_peer_client.find_predecessor(NodeMsg {
-            //         url: "".to_string(),
-            //     })
-            // }
+            let mut index = 0;
+            for finger in &finger_table.fingers {
+                let key_to_find_predecessor_for: Key = own_id.overflowing_sub(Key::two().overflowing_pow(index ).0).0;
+                let response = join_peer_client.find_predecessor(Request::new(key_to_find_predecessor_for.into()))
+                    .await
+                    .unwrap();
+                let predecessor_to_update_address = response.get_ref().address.clone();
+
+                let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_to_update_address))
+                    .await
+                    .unwrap();
+                index += 1;
+                let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest{
+                    index,
+                    finger_entry: Some(finger_entry_this.clone().into()),
+                })).await.unwrap();
+            }
             info!("Updated other nodes")
         }
         None => {

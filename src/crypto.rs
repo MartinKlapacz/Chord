@@ -10,6 +10,7 @@ pub type Key = u8;
 pub trait HashRingKey {
     fn size() -> usize;
     fn one() -> Key;
+    fn two() -> Key;
     fn finger_count() -> usize;
 }
 
@@ -24,6 +25,10 @@ impl HashRingKey for Key {
 
     fn one() -> Key {
         Key::default() + 1
+    }
+
+    fn two() -> Key {
+        Key::default() + 2
     }
 }
 

@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up setup thread");
     thread_handles.push(tokio::spawn(async move {
-        process_node_join(peer_address_option, cloned_grpc_addr_1, tx)
+        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx)
             .await
             .unwrap();
     }));

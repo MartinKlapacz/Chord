@@ -1,5 +1,6 @@
-use std::fmt::{Debug, };
+use std::fmt::{Debug, Pointer};
 use std::fmt;
+use simple_logger::init;
 
 use crate::chord::Address;
 use crate::chord::chord_proto::{AddressMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
@@ -209,6 +210,25 @@ impl Into<FingerEntry> for Address {
         }
     }
 }
+
+impl Into<FingerEntry> for &Address {
+    fn into(self) -> FingerEntry {
+        self.clone().into()
+    }
+}
+
+impl Into<Key> for FingerEntry {
+    fn into(self) -> Key {
+        Key::from_be_bytes(self.key.to_be_bytes())
+    }
+}
+
+impl Into<Key> for &FingerEntry {
+    fn into(self) -> Key {
+        self.clone().into()
+    }
+}
+
 
 impl FingerTable {
     pub fn new(key: &Key, address: &Address) -> FingerTable {

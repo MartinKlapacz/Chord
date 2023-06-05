@@ -5,7 +5,7 @@ use log::info;
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg};
+use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg, UpdateFingerTableEntryRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::Key;
@@ -108,6 +108,37 @@ impl chord_proto::chord_server::Chord for ChordService {
         let mut predecessor = self.predecessor.lock().unwrap();
         *predecessor = new_predecessor;
         Ok(Response::new(Data {}))
+    }
+
+    async fn update_finger_table_entry(&self, request: Request<UpdateFingerTableEntryRequest>) -> Result<Response<Empty>, Status> {
+        let index_to_update = request.get_ref().index as usize;
+        let finger_entry_update: &FingerEntry = &(request.get_ref().clone().finger_entry.unwrap().into());
+        let finger_entry_update_key: Key = finger_entry_update.into();
+
+        let predecessor_address_str = {
+            let predecessor_guard = self.predecessor.lock().unwrap();
+            predecessor_guard.address.clone()
+        };
+        let mut upper_finger = {
+            let finger_table_guard = self.finger_table.lock().unwrap();
+            finger_table_guard.fingers[index_to_update].key
+        };
+        if self.key <= finger_entry_update_key && finger_entry_update_key < upper_finger {
+            info!("Updating finger entry {} with {:?}", index_to_update, finger_entry_update);
+            {
+                let mut finger_table_guard = self.finger_table.lock().unwrap();
+                finger_table_guard.fingers[index_to_update] = finger_entry_update.clone();
+            }
+            let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_address_str))
+                .await
+                .unwrap();
+            let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest {
+                index: index_to_update as u32,
+                finger_entry: Some(finger_entry_update.into())
+            })).await.unwrap();
+        }
+
+        Ok(Response::new(Empty{}))
     }
 
 

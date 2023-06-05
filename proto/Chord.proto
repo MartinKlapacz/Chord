@@ -33,12 +33,18 @@ message Data {
   // todo
 }
 
+message UpdateFingerTableEntryRequest {
+  uint32 index = 1;
+  FingerEntryMsg fingerEntry = 2;
+}
+
 
 service Chord {
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
   rpc FindPredecessor (KeyMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
   rpc SetPredecessor (AddressMsg) returns (Data);
+  rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
 
   // debug
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
