@@ -22,11 +22,16 @@ message FingerEntryMsg {
   string address = 2;
 }
 
+message FingerEntryDebugMsg {
+  string id = 1;
+  string address = 2;
+}
+
 message NodeSummaryMsg {
   string url = 1;
   string id = 2;
-  FingerEntryMsg predecessor = 3;
-  repeated FingerEntryMsg fingerEntries = 4;
+  FingerEntryDebugMsg predecessor = 3;
+  repeated FingerEntryDebugMsg fingerEntries = 4;
 }
 
 message Data {

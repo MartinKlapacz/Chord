@@ -3,7 +3,7 @@ use std::fmt;
 use simple_logger::init;
 
 use crate::chord::Address;
-use crate::chord::chord_proto::{AddressMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
+use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
 
@@ -225,6 +225,20 @@ impl Into<Key> for FingerEntry {
 
 impl Into<Key> for &FingerEntry {
     fn into(self) -> Key {
+        self.clone().into()
+    }
+}
+
+impl Into<FingerEntryDebugMsg> for FingerEntry {
+    fn into(self) -> FingerEntryDebugMsg {
+        FingerEntryDebugMsg {
+            id: self.key.to_string(),
+            address: self.address,
+        }
+    }
+}
+impl Into<FingerEntryDebugMsg> for &FingerEntry {
+    fn into(self) -> FingerEntryDebugMsg {
         self.clone().into()
     }
 }
