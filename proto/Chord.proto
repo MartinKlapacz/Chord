@@ -49,7 +49,9 @@ service Chord {
   rpc FindPredecessor (KeyMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
   rpc SetPredecessor (AddressMsg) returns (Data);
+  rpc GetDirectSuccessor (Empty) returns (AddressMsg);
   rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
+  rpc FindClosestPrecedingFinger (KeyMsg) returns (FingerEntryMsg);
 
   // debug
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
