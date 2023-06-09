@@ -19,11 +19,8 @@ mod crypto;
 mod cli;
 mod finger_table;
 mod join;
+mod constants;
 
-static DHT_PUT: u16 = 650;
-static DHT_GET: u16 = 651;
-static DHT_SUCCESS: u16 = 652;
-static DHT_FAILURE: u16 = 653;
 
 pub mod chord_proto {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
