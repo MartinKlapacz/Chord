@@ -59,9 +59,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }));
 
-    info!("Starting up gRPC service");
     thread_handles.push(tokio::spawn(async move {
         let chord_service = ChordServer::new(ChordService::new(rx, &cloned_grpc_addr_2).await);
+        info!("Starting up gRPC service");
 
         let reflection_service = tonic_reflection::server::Builder::configure()
             .register_encoded_file_descriptor_set(chord_proto::FILE_DESCRIPTOR_SET)

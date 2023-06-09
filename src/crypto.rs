@@ -19,16 +19,16 @@ impl HashRingKey for Key {
         mem::size_of::<Key>()
     }
 
-    fn finger_count() -> usize {
-        Key::size() * 8
-    }
-
     fn one() -> Key {
         Key::default() + 1
     }
 
     fn two() -> Key {
         Key::default() + 2
+    }
+
+    fn finger_count() -> usize {
+        Key::size() * 8
     }
 }
 

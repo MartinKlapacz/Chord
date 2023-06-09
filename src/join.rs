@@ -55,8 +55,9 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             tx.send((finger_table.clone(), predecessor.into())).unwrap();
 
             info!("Updating others...");
-            for (index, finger) in finger_table.fingers.iter().enumerate() {
+            for index in 0..finger_table.fingers.len() {
                 let key_to_find_predecessor_for: Key = own_id.overflowing_sub(Key::two().overflowing_pow(index as u32).0).0;
+                println!("key_to_find_predecessor_for: {} ", key_to_find_predecessor_for);
                 let response = join_peer_client.find_predecessor(Request::new(key_to_find_predecessor_for.into()))
                     .await
                     .unwrap();

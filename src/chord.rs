@@ -184,15 +184,13 @@ impl chord_proto::chord_server::Chord for ChordService {
                 finger_table_guard.fingers[index_to_update].address = finger_entry_update.address.clone();
             }
 
-            if predecessor_address_str.ne(self.address.as_str()) {
-                let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_address_str))
-                    .await
-                    .unwrap();
-                let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest {
-                    index: index_to_update as u32,
-                    finger_entry: Some(finger_entry_update.into()),
-                })).await.unwrap();
-            }
+            let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_address_str))
+                .await
+                .unwrap();
+            let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest {
+                index: index_to_update as u32,
+                finger_entry: Some(finger_entry_update.into()),
+            })).await.unwrap();
         }
 
         Ok(Response::new(Empty {}))
