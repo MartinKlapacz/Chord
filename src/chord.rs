@@ -117,7 +117,9 @@ impl chord_proto::chord_server::Chord for ChordService {
         let mut current_key: Key = current_address_finger_entry.clone().into();
         let mut current_successor_key: Key = crypto::hash(&current_successor_finger_entry.clone().address);
 
-        while !is_between(look_up_key, current_key, current_successor_key, true, false) {
+        while !is_between(look_up_key, current_key, current_successor_key, true, false)
+            && current_key != current_successor_key
+        {
             let mut current_client = ChordClient::connect(format!("http://{}", current_successor_finger_entry.address))
                 .await
                 .unwrap();
@@ -149,7 +151,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Data>, Status> {
         let new_predecessor: FingerEntry = request.get_ref().into();
 
-        info!("Setting predecessor to {:?}", new_predecessor);
+        info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
         let mut predecessor = self.predecessor.lock().unwrap();
         *predecessor = new_predecessor;
         Ok(Response::new(Data {}))
@@ -176,7 +178,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
 
         let upper_key = crypto::hash(&upper_finger.address);
-        if is_between(finger_entry_update_key, self.pos, upper_key, false, true)
+        if is_between(finger_entry_update_key, self.pos, upper_key, true, false)
             || self.pos == upper_key {
             info!("Updating finger entry {} with {:?}", index_to_update, finger_entry_update);
             {
@@ -199,9 +201,10 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn find_closest_preceding_finger(&self, request: Request<KeyMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = Key::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
-            if is_between(finger.key, self.pos, key, false, false) {
+            let node_pos = crypto::hash(&finger.address);
+            if is_between(node_pos, self.pos, key, true, true) {
                 return Ok(Response::new(FingerEntryMsg {
-                    id: finger.key.to_be_bytes().to_vec(),
+                    id: node_pos.to_be_bytes().to_vec(),
                     address: finger.clone().address.into(),
                 }));
             }
