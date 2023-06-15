@@ -1,10 +1,9 @@
-use std::cmp::Ordering;
-use std::collections::HashMap;
-
-use tonic::{Request, Response, Status};
+use tonic::Request;
 use tonic::transport::Channel;
 
-use crate::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg, UpdateFingerTableEntryRequest};
+use chord::crypto;
+
+use crate::chord_proto::{Empty, NodeSummaryMsg};
 use crate::chord_proto::chord_client::ChordClient;
 
 pub mod chord_proto {
