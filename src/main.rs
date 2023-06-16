@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }));
 
 
-    info!("Starting up tcp main thread");
+    info!("Starting up tcp main thread on {}", tcp_addr);
     thread_handles.push(tokio::spawn(async move {
         let listener = TcpListener::bind(tcp_addr).await.unwrap();
         loop {
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     thread_handles.push(tokio::spawn(async move {
         let chord_service = ChordServer::new(ChordService::new(rx, &cloned_grpc_addr_2).await);
-        info!("Starting up gRPC service");
+        info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
 
         let reflection_service = tonic_reflection::server::Builder::configure()
             .register_encoded_file_descriptor_set(chord_proto::FILE_DESCRIPTOR_SET)

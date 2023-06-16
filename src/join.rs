@@ -54,24 +54,26 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             // finger table is constructed, send it to grpc thread so it can start up its service
             tx.send((finger_table.clone(), predecessor.into())).unwrap();
 
-            info!("Updating others...");
+            info!("Updating other nodes...");
             for index in 0..finger_table.fingers.len() {
                 let key_to_find_predecessor_for: Key = own_id.overflowing_sub(Key::two().overflowing_pow(index as u32).0).0;
-                info!("Searching predecessor for key: {} ", key_to_find_predecessor_for);
+                info!("Looking for predecessor for key: {} ", key_to_find_predecessor_for);
                 let response = join_peer_client.find_predecessor(Request::new(key_to_find_predecessor_for.into()))
                     .await
                     .unwrap();
                 let predecessor_to_update_address = response.get_ref().address.clone();
+                info!("Predecessor for key {} is {}", key_to_find_predecessor_for, predecessor_to_update_address);
 
                 let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_to_update_address))
                     .await
                     .unwrap();
+                info!("Calling update_finger_table on {} with index={}", predecessor_to_update_address, index);
                 let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest {
                     index: index as u32,
                     finger_entry: Some(finger_entry_this.clone().into()),
                 })).await.unwrap();
             }
-            info!("Updated other nodes")
+            info!("Finished updating other nodes")
         }
         None => {
             info!("Starting up a new cluster");

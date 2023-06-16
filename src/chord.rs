@@ -180,7 +180,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         let upper_key = crypto::hash(&upper_finger.address);
         if is_between(finger_entry_update_key, self.pos, upper_key, true, false)
             || self.pos == upper_key {
-            info!("Updating finger entry {} with {:?}", index_to_update, finger_entry_update);
+            info!("Updating finger table entry {} with {:?}", index_to_update, finger_entry_update);
             {
                 let mut finger_table_guard = self.finger_table.lock().unwrap();
                 finger_table_guard.fingers[index_to_update].address = finger_entry_update.address.clone();
