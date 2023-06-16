@@ -3,6 +3,8 @@ use tonic::transport::Channel;
 
 use chord::crypto;
 use chord::crypto::Key;
+use std::process::Command;
+use tokio::time::{sleep, Duration};
 
 use crate::chord_proto::{Empty, NodeSummaryMsg};
 use crate::chord_proto::chord_client::ChordClient;
@@ -13,7 +15,7 @@ pub mod chord_proto {
 
 #[tokio::main]
 async fn main() {
-    let node_ports: Vec<i32> = vec![5601, 5602, 5603, 5604, 5605];
+    let node_ports: Vec<u16> = start_up_nodes(4).await;
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
 
     for node_port in node_ports {
@@ -68,4 +70,30 @@ fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
         .filter(|&node| key <= *node)
         .min()
         .unwrap_or(other_nodes.iter().min().unwrap())
+}
+
+async fn start_up_nodes(node_count: usize) -> Vec<u16> {
+    let mut node_handles = Vec::new();
+    let mut ports = Vec::new();
+    for i in 0..node_count {
+        let grpc_node_port = 5501 + i;
+        let tcp_node_port = grpc_node_port + 100;
+        let handle = tokio::spawn(async move {
+            let _ = Command::new("cargo")
+                .arg("run")
+                .arg("--color=always")
+                .args(&["--package", "chord"])
+                .args(&["--bin", "chord"])
+                .arg("--")
+                .args(&["--tcp", format!("127.0.0.1:{}", grpc_node_port).as_str()])
+                .args(&["--grpc", format!("127.0.0.1:{}", tcp_node_port).as_str()])
+                .output()
+                .expect("failed to execute process");
+        });
+        node_handles.push(handle);
+        println!("Started up node on port {}", grpc_node_port);
+        ports.push(grpc_node_port as u16);
+        sleep(Duration::from_secs(1 as u64)).await;
+    }
+    ports
 }
