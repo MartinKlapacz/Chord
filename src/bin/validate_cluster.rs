@@ -1,12 +1,14 @@
 use std::fmt::format;
+use std::process::Stdio;
+
 use tokio::join;
+use tokio::process::{Child, Command};
+use tokio::time::{Duration, sleep};
 use tonic::Request;
 use tonic::transport::Channel;
 
 use chord::crypto;
 use chord::crypto::Key;
-use tokio::process::{Child, Command};
-use tokio::time::{sleep, Duration};
 
 use crate::chord_proto::{Empty, NodeSummaryMsg};
 use crate::chord_proto::chord_client::ChordClient;
@@ -21,7 +23,7 @@ const DURATION: Duration = Duration::from_secs(1 as u64);
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let (node_ports, child_handles)  = start_up_nodes(8)
+        let (node_ports, child_handles) = start_up_nodes(4)
             .await;
         for node_port in node_ports {
             let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
@@ -64,7 +66,7 @@ async fn main() {
                 eprintln!("Node {} at position {}: Wrong finger entry! ", node_summaries[i].url, node_summaries[i].id);
                 eprintln!("Finger key (at index: {}) with value {} points to node with address {} and key {} ", i, finger_key, finger.address, finger.id);
                 eprintln!("But node at position {} is responsible for {}", actually_responsible_node, finger_key);
-                return
+                return;
             }
         }
     }
@@ -86,17 +88,7 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
     let join_peer_address = format!("127.0.0.1:{}", ports[0]);
 
     // node 1 is the join peer for all other nodes
-    let child_handle = Command::new("cargo")
-        .arg("run")
-        .arg("--color=always")
-        .args(&["--package", "chord"])
-        .args(&["--bin", "chord"])
-        .arg("--")
-        .args(&["--tcp", "127.0.0.1:5501"])
-        .args(&["--grpc", join_peer_address.as_str()])
-        .kill_on_drop(true)
-        .spawn()
-        .expect("failed to start process");
+    let child_handle = get_base_node_start_up_command(5501u16, 5601u16, None);
     child_handles.push(child_handle);
     sleep(Duration::from_secs(2 as u64)).await;
 
@@ -104,18 +96,7 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
     for i in 1..node_count {
         let grpc_node_port = 5601u16 + i as u16;
         let tcp_node_port = grpc_node_port - 100;
-        let child_handle = Command::new("cargo")
-            .arg("run")
-            .arg("--color=always")
-            .args(&["--package", "chord"])
-            .args(&["--bin", "chord"])
-            .arg("--")
-            .args(&["--tcp", format!("127.0.0.1:{}", tcp_node_port).as_str()])
-            .args(&["--grpc", format!("127.0.0.1:{}", grpc_node_port).as_str()])
-            .args(&["--peer", join_peer_address.as_str()])
-            .kill_on_drop(true)
-            .spawn()
-            .expect("failed to start process");
+        let child_handle = get_base_node_start_up_command(tcp_node_port, grpc_node_port, Some(join_peer_address.as_str()));
         child_handles.push(child_handle);
         ports.push(grpc_node_port);
 
@@ -123,4 +104,35 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
         sleep(DURATION).await;
     }
     (ports, child_handles)
+}
+
+fn get_base_node_start_up_command(tcp_node_port: u16, grpc_node_port: u16, peer_node_port: Option<&str>) -> Child {
+    // todo: remove duplicate code here
+    match peer_node_port {
+        Some(peer) => {
+            Command::new("cargo")
+                .arg("run")
+                .arg("--color=always")
+                .args(&["--package", "chord"])
+                .args(&["--bin", "chord"])
+                .arg("--")
+                .args(&["--tcp", format!("127.0.0.1:{}", tcp_node_port).as_str()])
+                .args(&["--grpc", format!("127.0.0.1:{}", grpc_node_port).as_str()]).args(&["--peer", peer])
+                .kill_on_drop(true)
+                .spawn()
+        }
+        _ => {
+            Command::new("cargo")
+                .arg("run")
+                .arg("--color=always")
+                .args(&["--package", "chord"])
+                .args(&["--bin", "chord"])
+                .arg("--")
+                .args(&["--tcp", format!("127.0.0.1:{}", tcp_node_port).as_str()])
+                .args(&["--grpc", format!("127.0.0.1:{}", grpc_node_port).as_str()])
+                .kill_on_drop(true)
+                .spawn()
+        }
+    }
+        .expect("failed to start process")
 }
