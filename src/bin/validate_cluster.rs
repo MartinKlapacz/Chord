@@ -15,11 +15,13 @@ pub mod chord_proto {
     tonic::include_proto!("chord");
 }
 
+const DURATION: Duration = Duration::from_secs(1 as u64);
+
 #[tokio::main]
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let (node_ports, child_handles)  = start_up_nodes(5)
+        let (node_ports, child_handles)  = start_up_nodes(8)
             .await;
         for node_port in node_ports {
             let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
@@ -54,13 +56,13 @@ async fn main() {
 
     for i in 0..node_summaries.len() {
         let fingers = &node_summaries[i].finger_entries;
-        for finger in fingers {
+        for (i, finger) in fingers.iter().enumerate() {
             let finger_key: Key = finger.id.parse::<Key>().unwrap();
             let node_pointed_to = crypto::hash(&finger.address);
             let actually_responsible_node = get_responsible_node_for_key(finger_key, &node_ids);
             if node_pointed_to.ne(&actually_responsible_node) {
-                eprintln!("Node {}: wrong finger ", node_summaries[i].id);
-                eprintln!("Finger key {} points to node with address {} and key {} ", finger_key, finger.address, finger.id);
+                eprintln!("Node {} at position {}: Wrong finger entry! ", node_summaries[i].url, node_summaries[i].id);
+                eprintln!("Finger key (at index: {}) with value {} points to node with address {} and key {} ", i, finger_key, finger.address, finger.id);
                 eprintln!("But node at position {} is responsible for {}", actually_responsible_node, finger_key);
                 return
             }
@@ -118,7 +120,7 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
         ports.push(grpc_node_port);
 
         println!("Started up node on port {}", grpc_node_port);
-        sleep(Duration::from_secs(2 as u64)).await;
+        sleep(DURATION).await;
     }
     (ports, child_handles)
 }
