@@ -13,7 +13,7 @@ pub mod chord_proto {
 
 #[tokio::main]
 async fn main() {
-    let node_ports: Vec<i32> = vec![5601];
+    let node_ports: Vec<i32> = vec![5601, 5602, 5603, 5604, 5605];
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
 
     for node_port in node_ports {
@@ -51,7 +51,12 @@ async fn main() {
             let finger_key: Key = finger.id.parse::<Key>().unwrap();
             let node_pointed_to = crypto::hash(&finger.address);
             let actually_responsible_node = get_responsible_node_for_key(finger_key, &node_ids);
-            assert_eq!(node_pointed_to, actually_responsible_node)
+            if node_pointed_to.ne(&actually_responsible_node) {
+                eprintln!("Node {}: wrong finger ", node_summaries[i].id);
+                eprintln!("Finger key {} points to node with address {} and key {} ", finger_key, finger.address, finger.id);
+                eprintln!("But node at position {} is responsible for {}", actually_responsible_node, finger_key);
+                return
+            }
         }
     }
 
@@ -60,7 +65,7 @@ async fn main() {
 
 fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
     *other_nodes.iter()
-        .filter(|&node| key < *node)
+        .filter(|&node| key <= *node)
         .min()
         .unwrap_or(other_nodes.iter().min().unwrap())
 }
