@@ -1,9 +1,11 @@
+use std::fmt::format;
+use tokio::join;
 use tonic::Request;
 use tonic::transport::Channel;
 
 use chord::crypto;
 use chord::crypto::Key;
-use std::process::Command;
+use tokio::process::{Child, Command};
 use tokio::time::{sleep, Duration};
 
 use crate::chord_proto::{Empty, NodeSummaryMsg};
@@ -15,22 +17,25 @@ pub mod chord_proto {
 
 #[tokio::main]
 async fn main() {
-    let node_ports: Vec<u16> = start_up_nodes(4).await;
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
+    {
+        let (node_ports, child_handles)  = start_up_nodes(5)
+            .await;
+        for node_port in node_ports {
+            let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
+                .await
+                .unwrap();
+            let summary: NodeSummaryMsg = client.get_node_summary(Request::new(Empty {}))
+                .await
+                .unwrap().get_ref().clone();
 
-    for node_port in node_ports {
-        let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
-            .await
-            .unwrap();
-        let summary: NodeSummaryMsg = client.get_node_summary(Request::new(Empty {}))
-            .await
-            .unwrap().get_ref().clone();
-
-        node_summaries.push(summary);
+            node_summaries.push(summary);
+        }
+        // child_handles getting out of scope will shut down nodes due to .kill_on_drop(true)
     }
 
     node_summaries.sort_by(|a: &NodeSummaryMsg, b: &NodeSummaryMsg| {
-        a.id.parse::<u128>().unwrap().cmp(&b.id.parse::<u128>().unwrap())
+        a.id.parse::<Key>().unwrap().cmp(&b.id.parse::<Key>().unwrap())
     });
 
     let node_ids: Vec<Key> = node_summaries.iter()
@@ -72,28 +77,48 @@ fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
         .unwrap_or(other_nodes.iter().min().unwrap())
 }
 
-async fn start_up_nodes(node_count: usize) -> Vec<u16> {
-    let mut node_handles = Vec::new();
-    let mut ports = Vec::new();
-    for i in 0..node_count {
-        let grpc_node_port = 5501 + i;
-        let tcp_node_port = grpc_node_port + 100;
-        let handle = tokio::spawn(async move {
-            let _ = Command::new("cargo")
-                .arg("run")
-                .arg("--color=always")
-                .args(&["--package", "chord"])
-                .args(&["--bin", "chord"])
-                .arg("--")
-                .args(&["--tcp", format!("127.0.0.1:{}", grpc_node_port).as_str()])
-                .args(&["--grpc", format!("127.0.0.1:{}", tcp_node_port).as_str()])
-                .output()
-                .expect("failed to execute process");
-        });
-        node_handles.push(handle);
+async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
+    let mut child_handles = Vec::new();
+    let mut ports = vec![5601_u16];
+
+    let join_peer_address = format!("127.0.0.1:{}", ports[0]);
+
+    // node 1 is the join peer for all other nodes
+    let child_handle = Command::new("cargo")
+        .arg("run")
+        .arg("--color=always")
+        .args(&["--package", "chord"])
+        .args(&["--bin", "chord"])
+        .arg("--")
+        .args(&["--tcp", "127.0.0.1:5501"])
+        .args(&["--grpc", join_peer_address.as_str()])
+        .kill_on_drop(true)
+        .spawn()
+        .expect("failed to start process");
+    child_handles.push(child_handle);
+    sleep(Duration::from_secs(2 as u64)).await;
+
+    // all other nodes join node 1
+    for i in 1..node_count {
+        let grpc_node_port = 5601u16 + i as u16;
+        let tcp_node_port = grpc_node_port - 100;
+        let child_handle = Command::new("cargo")
+            .arg("run")
+            .arg("--color=always")
+            .args(&["--package", "chord"])
+            .args(&["--bin", "chord"])
+            .arg("--")
+            .args(&["--tcp", format!("127.0.0.1:{}", tcp_node_port).as_str()])
+            .args(&["--grpc", format!("127.0.0.1:{}", grpc_node_port).as_str()])
+            .args(&["--peer", join_peer_address.as_str()])
+            .kill_on_drop(true)
+            .spawn()
+            .expect("failed to start process");
+        child_handles.push(child_handle);
+        ports.push(grpc_node_port);
+
         println!("Started up node on port {}", grpc_node_port);
-        ports.push(grpc_node_port as u16);
-        sleep(Duration::from_secs(1 as u64)).await;
+        sleep(Duration::from_secs(2 as u64)).await;
     }
-    ports
+    (ports, child_handles)
 }
