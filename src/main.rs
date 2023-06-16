@@ -23,6 +23,7 @@ mod tcp_service;
 mod crypto;
 mod cli;
 mod finger_table;
+mod key_value_store;
 
 static DHT_PUT: u16 = 650;
 static DHT_GET: u16 = 651;
