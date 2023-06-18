@@ -23,7 +23,7 @@ const DURATION: Duration = Duration::from_secs(1 as u64);
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let (node_ports, child_handles) = start_up_nodes(4)
+        let (node_ports, child_handles) = start_up_nodes(16)
             .await;
         for node_port in node_ports {
             let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
@@ -56,22 +56,29 @@ async fn main() {
         }
     }
 
+    let mut is_valid = true;
     for i in 0..node_summaries.len() {
         let fingers = &node_summaries[i].finger_entries;
-        for (i, finger) in fingers.iter().enumerate() {
-            let finger_key: Key = finger.id.parse::<Key>().unwrap();
+        for (j, finger) in fingers.iter().enumerate() {
+            let pos_pointed_to: Key = finger.id.parse::<Key>().unwrap();
             let node_pointed_to = crypto::hash(&finger.address);
-            let actually_responsible_node = get_responsible_node_for_key(finger_key, &node_ids);
-            if node_pointed_to.ne(&actually_responsible_node) {
+            let actually_responsible_node_key = get_responsible_node_for_key(pos_pointed_to, &node_ids);
+            let actually_responsible_node_address = get_node_address_for_key(&actually_responsible_node_key, &node_summaries);
+            if node_pointed_to.ne(&actually_responsible_node_key) {
+                eprintln!("-----");
                 eprintln!("Node {} at position {}: Wrong finger entry! ", node_summaries[i].url, node_summaries[i].id);
-                eprintln!("Finger key (at index: {}) with value {} points to node with address {} and key {} ", i, finger_key, finger.address, finger.id);
-                eprintln!("But node at position {} is responsible for {}", actually_responsible_node, finger_key);
-                return;
+                eprintln!("Finger key (at index: {}) with value {} points to node with address {} and key {} ", j, pos_pointed_to, finger.address, finger.id);
+                eprintln!("But node at position {} with url {} is responsible for {}", actually_responsible_node_key, actually_responsible_node_address, pos_pointed_to);
+                eprintln!("-----");
+                is_valid = false;
             }
         }
     }
-
-    println!("looks good!")
+    if is_valid {
+        eprintln!("Looks good!")
+    } else {
+        eprintln!("Cluster is invalid!")
+    }
 }
 
 fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
@@ -79,6 +86,14 @@ fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
         .filter(|&node| key <= *node)
         .min()
         .unwrap_or(other_nodes.iter().min().unwrap())
+}
+
+fn get_node_address_for_key(key: &Key, node_summaries: &Vec<NodeSummaryMsg>) -> String {
+    node_summaries.iter()
+        .find(|node_summary| node_summary.id.parse::<Key>().unwrap().eq(key))
+        .unwrap()
+        .url
+        .clone()
 }
 
 async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
