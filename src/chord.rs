@@ -8,7 +8,7 @@ use tonic::{Request, Response, Status};
 use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg, UpdateFingerTableEntryRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
-use crate::crypto::Key;
+use crate::crypto::{HashRingKey, Key};
 use crate::finger_table::{FingerEntry, FingerTable};
 
 pub mod chord_proto {
@@ -108,38 +108,44 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn find_predecessor(&self, request: Request<KeyMsg>) -> Result<Response<AddressMsg>, Status> {
         let look_up_key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
-        let mut current_address_finger_entry: FingerEntry = self.address.clone().into();
-        let mut current_successor_finger_entry: FingerEntry = {
+
+        // current
+        let mut current_address: Address = self.address.clone();
+        let mut current_key: Key = crypto::hash(&current_address);
+
+        // successor
+        let mut current_successor_address: Address = {
             let finger_table_guard = self.finger_table.lock().unwrap();
-            finger_table_guard.fingers[0].clone()
+            finger_table_guard.fingers[0].address.clone()
         };
+        let mut current_successor_key: Key = crypto::hash(&current_successor_address);
 
-        let mut current_key: Key = current_address_finger_entry.clone().into();
-        let mut current_successor_key: Key = crypto::hash(&current_successor_finger_entry.clone().address);
 
-        while !is_between(look_up_key, current_key, current_successor_key, true, false)
-            && current_key != current_successor_key
-        {
-            let mut current_client = ChordClient::connect(format!("http://{}", current_successor_finger_entry.address))
+        while (!is_between(look_up_key, current_key, current_successor_key, true, false)) && current_key != current_successor_key {
+            let mut current_client = ChordClient::connect(format!("http://{}", &current_successor_address))
                 .await
                 .unwrap();
             let response = current_client.find_closest_preceding_finger(Request::new(KeyMsg {
                 key: look_up_key.to_be_bytes().to_vec(),
             })).await.unwrap();
-            current_address_finger_entry = response.get_ref().clone().into();
-            current_key = current_address_finger_entry.key;
 
-            current_client = ChordClient::connect(format!("http://{}", current_address_finger_entry.address))
+            // update current
+            current_address = response.get_ref().address.clone();
+            current_key = Key::from_be_bytes(response.get_ref().id.clone().try_into().unwrap());
+
+            current_client = ChordClient::connect(format!("http://{}", current_address))
                 .await
                 .unwrap();
             let response = current_client.get_direct_successor(Request::new(Empty {}))
                 .await
                 .unwrap();
-            current_successor_finger_entry = response.get_ref().into();
-            current_successor_key = current_successor_finger_entry.key;
+
+            // update successor
+            current_successor_address = response.get_ref().into();
+            current_successor_key = crypto::hash(&current_successor_address);
         }
 
-        Ok(Response::new(current_address_finger_entry.into()))
+        Ok(Response::new(current_address.into()))
     }
 
     async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
