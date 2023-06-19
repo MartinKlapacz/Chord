@@ -60,17 +60,19 @@ async fn main() {
     for i in 0..node_summaries.len() {
         let fingers = &node_summaries[i].finger_entries;
         for (j, finger) in fingers.iter().enumerate() {
-            let pos_pointed_to: Key = finger.id.parse::<Key>().unwrap();
-            let node_pointed_to = crypto::hash(&finger.address);
-            let actually_responsible_node_key = get_responsible_node_for_key(pos_pointed_to, &node_ids);
+            let finger_key: Key = finger.id.parse::<Key>().unwrap();
+            let node_key_pointed_to = crypto::hash(&finger.address);
+            let actually_responsible_node_key = get_responsible_node_for_key(finger_key, &node_ids);
             let actually_responsible_node_address = get_node_address_for_key(&actually_responsible_node_key, &node_summaries);
-            if node_pointed_to.ne(&actually_responsible_node_key) {
+            if node_key_pointed_to.ne(&actually_responsible_node_key) {
+                if is_valid {
+                    eprintln!("-----");
+                    is_valid = false;
+                }
+                eprintln!("Node ({}, {}): Wrong finger entry! ", node_summaries[i].id, node_summaries[i].url);
+                eprintln!("{}-th Finger {} points to node ({}, {}) ", j, finger_key, node_key_pointed_to, &finger.address);
+                eprintln!("But node ({}, {}) is responsible for {}", actually_responsible_node_key, actually_responsible_node_address, finger_key);
                 eprintln!("-----");
-                eprintln!("Node {} at position {}: Wrong finger entry! ", node_summaries[i].url, node_summaries[i].id);
-                eprintln!("Finger key (at index: {}) with value {} points to node with address {} and key {} ", j, pos_pointed_to, finger.address, finger.id);
-                eprintln!("But node at position {} with url {} is responsible for {}", actually_responsible_node_key, actually_responsible_node_address, pos_pointed_to);
-                eprintln!("-----");
-                is_valid = false;
             }
         }
     }
