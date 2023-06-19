@@ -30,11 +30,11 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
                 let response = join_peer_client.find_successor(Request::new(finger.into()))
                     .await
                     .unwrap();
-                finger.address = response.get_ref().clone().into();
+                *finger.get_address_mut() = response.get_ref().clone().into();
             }
             info!("Initialized finger table from peer");
 
-            let direct_successor_url = finger_table.fingers.first().unwrap().address.clone();
+            let direct_successor_url = finger_table.fingers.first().unwrap().get_address().clone();
             let mut direct_successor_client = ChordClient::connect(format!("http://{}", direct_successor_url))
                 .await
                 .unwrap();

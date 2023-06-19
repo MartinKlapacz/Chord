@@ -38,7 +38,7 @@ impl ChordService {
     }
 
     pub fn is_successor_of_key(&self, key: Key) -> bool {
-        let predecessor_position = self.predecessor.lock().unwrap().key.clone();
+        let predecessor_position = self.predecessor.lock().unwrap().get_key().clone();
         let own_position = self.pos.clone();
 
         if predecessor_position < own_position {
@@ -116,7 +116,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         // successor
         let mut current_successor_address: Address = {
             let finger_table_guard = self.finger_table.lock().unwrap();
-            finger_table_guard.fingers[0].address.clone()
+            finger_table_guard.fingers[0].get_address().clone()
         };
         let mut current_successor_key: Key = crypto::hash(&current_successor_address);
 
@@ -175,7 +175,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let predecessor_address_str = {
             let predecessor_guard = self.predecessor.lock().unwrap();
-            predecessor_guard.address.clone()
+            predecessor_guard.get_address().clone()
         };
         let upper_finger = {
             let finger_table_guard = self.finger_table.lock().unwrap();
@@ -183,15 +183,14 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
 
-        let upper_key = crypto::hash(&upper_finger.address);
+        let upper_key = crypto::hash(&upper_finger.get_address());
         let lower_key = self.pos.overflowing_add(Key::two().overflowing_pow(index_to_update as u32).0).0 as Key;
         // let lower_key = self.pos;
-        if is_between(finger_entry_update_key, lower_key, upper_key, false, true)
-             {
+        if is_between(finger_entry_update_key, lower_key, upper_key, false, true) {
             info!("Updating finger table entry {} with {:?}", index_to_update, finger_entry_update);
             {
                 let mut finger_table_guard = self.finger_table.lock().unwrap();
-                finger_table_guard.fingers[index_to_update].address = finger_entry_update.address.clone();
+                *finger_table_guard.fingers[index_to_update].get_address_mut() = finger_entry_update.get_address().clone();
             }
 
             let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_address_str))
@@ -209,11 +208,11 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn find_closest_preceding_finger(&self, request: Request<KeyMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = Key::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
-            let node_pos = crypto::hash(&finger.address);
+            let node_pos = crypto::hash(finger.get_address());
             if is_between(node_pos, self.pos, key, true, true) {
                 return Ok(Response::new(FingerEntryMsg {
                     id: node_pos.to_be_bytes().to_vec(),
-                    address: finger.clone().address.into(),
+                    address: finger.clone().get_address().into(),
                 }));
             }
         }

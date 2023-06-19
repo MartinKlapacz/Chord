@@ -14,8 +14,8 @@ pub struct FingerTable {
 
 #[derive(Clone)]
 pub struct FingerEntry {
-    pub(crate) key: Key,
-    pub(crate) address: Address,
+    key: Key,
+    address: Address,
 }
 
 impl Debug for FingerEntry {
@@ -33,6 +33,18 @@ impl FingerEntry {
             address: address.clone(),
             key: key.clone(),
         }
+    }
+
+    pub fn get_key(&self) -> &Key {
+        &self.key
+    }
+
+    pub fn get_address(&self) -> &Address {
+        &self.address
+    }
+
+    pub fn get_address_mut(&mut self) -> &mut Address {
+        &mut self.address
     }
 }
 
