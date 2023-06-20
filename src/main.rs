@@ -20,6 +20,7 @@ mod cli;
 mod finger_table;
 mod join;
 mod constants;
+mod key_value_store;
 
 
 pub mod chord_proto {

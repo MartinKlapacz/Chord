@@ -10,6 +10,7 @@ use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
 use crate::finger_table::{FingerEntry, FingerTable};
+use crate::key_value_store::{HashMapStore, KVStore};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -17,12 +18,12 @@ pub mod chord_proto {
 
 pub type Address = String;
 
-#[derive(Debug)]
 pub struct ChordService {
     address: String,
     pos: Key,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor: Arc<Mutex<FingerEntry>>,
+    kv_store: Arc<Mutex<dyn KVStore + Send>>
 }
 
 
@@ -34,6 +35,7 @@ impl ChordService {
             pos: crypto::hash(&url),
             finger_table: Arc::new(Mutex::new(finger_table)),
             predecessor: Arc::new(Mutex::new(predecessor)),
+            kv_store: Arc::new(Mutex::new(HashMapStore::default())),
         }
     }
 

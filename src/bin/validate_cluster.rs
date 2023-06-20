@@ -23,7 +23,7 @@ const DURATION: Duration = Duration::from_secs(1 as u64);
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let (node_ports, child_handles) = start_up_nodes(16)
+        let (node_ports, child_handles) = start_up_nodes(4)
             .await;
         for node_port in node_ports {
             let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
