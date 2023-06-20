@@ -3,9 +3,9 @@ use std::io::ErrorKind;
 
 use log::info;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpSocket, TcpStream};
+use tokio::net::TcpStream;
+use crate::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 
-use crate::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 
 pub async fn handle_client_connection(mut socket: TcpStream) -> Result<(), Box<dyn Error>> {
     loop {
