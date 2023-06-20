@@ -51,7 +51,7 @@ impl FingerEntry {
 impl Into<FingerEntryMsg> for AddressMsg {
     fn into(self) -> FingerEntryMsg {
         FingerEntryMsg {
-            id: crypto::hash(&self.address).to_be_bytes().to_vec(),
+            id: crypto::hash(&self.address.as_bytes()).to_be_bytes().to_vec(),
             address: self.address,
         }
     }
@@ -127,7 +127,7 @@ impl Into<AddressMsg> for &FingerEntry {
 impl Into<FingerEntry> for AddressMsg {
     fn into(self) -> FingerEntry {
         FingerEntry {
-            key: crypto::hash(&self.address),
+            key: crypto::hash(&self.address.as_bytes()),
             address: self.address,
         }
     }
@@ -168,7 +168,7 @@ impl Into<Address> for &AddressMsg {
 impl Into<KeyMsg> for AddressMsg {
     fn into(self) -> KeyMsg {
         KeyMsg {
-            key: crypto::hash(&self.address).to_be_bytes().to_vec()
+            key: crypto::hash(&self.address.as_bytes()).to_be_bytes().to_vec()
         }
     }
 }
@@ -217,7 +217,7 @@ impl Into<KeyMsg> for &mut FingerEntry {
 impl Into<FingerEntry> for Address {
     fn into(self) -> FingerEntry {
         FingerEntry {
-            key: crypto::hash(&self),
+            key: crypto::hash(&self.as_bytes()),
             address: self,
         }
     }

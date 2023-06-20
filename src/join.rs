@@ -14,7 +14,7 @@ use crate::crypto::{HashRingKey, Key};
 use crate::finger_table::{FingerEntry, FingerTable};
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>> {
-    let own_id = crypto::hash(own_grpc_address_str);
+    let own_id = crypto::hash(own_grpc_address_str.as_bytes());
 
     let mut finger_table = FingerTable::new(&own_id, own_grpc_address_str);
     let mut predecessor: AddressMsg = own_grpc_address_str.clone().into();

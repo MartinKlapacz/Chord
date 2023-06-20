@@ -39,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let peer_address_option = args.peer;
     let cloned_grpc_addr_1 = args.grpc_address.clone();
     let cloned_grpc_addr_2 = args.grpc_address.clone();
+    let cloned_grpc_addr_3 = args.grpc_address.clone();
 
     let (tx, rx) = oneshot::channel();
 
@@ -54,9 +55,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     thread_handles.push(tokio::spawn(async move {
         let listener = TcpListener::bind(tcp_addr).await.unwrap();
         loop {
+            let grpc_address = cloned_grpc_addr_3.clone();
             let (socket, _) = listener.accept().await.unwrap();
             info!("New client connection established");
-            tokio::spawn(async move { handle_client_connection(socket).await.unwrap() });
+            tokio::spawn(async move { handle_client_connection(socket, &grpc_address).await.unwrap() });
         }
     }));
 

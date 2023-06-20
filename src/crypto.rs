@@ -32,9 +32,9 @@ impl HashRingKey for Key {
     }
 }
 
-pub fn hash(input: &String) -> Key {
+pub fn hash(input: &[u8]) -> Key {
     let mut hasher = Hasher::new();
-    hasher.update(input.as_bytes());
+    hasher.update(input);
     let hash = hasher.finalize();
     let bytes = *hash.as_bytes();
     Key::from_le_bytes(bytes[0..Key::size()].try_into().unwrap())

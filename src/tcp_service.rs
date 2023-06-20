@@ -4,10 +4,16 @@ use std::io::ErrorKind;
 use log::info;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tonic::Request;
+use tonic::transport::Channel;
+use chord::crypto;
+use chord::crypto::Key;
+use crate::chord::chord_proto::chord_client::ChordClient;
+use crate::chord::chord_proto::KeyMsg;
 use crate::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 
 
-pub async fn handle_client_connection(mut socket: TcpStream) -> Result<(), Box<dyn Error>> {
+pub async fn handle_client_connection(mut socket: TcpStream, grpc_address: &String) -> Result<(), Box<dyn Error>> {
     loop {
         let size_res = socket.read_u16().await;
         let size = match size_res {
@@ -22,31 +28,47 @@ pub async fn handle_client_connection(mut socket: TcpStream) -> Result<(), Box<d
             break;
         }
         let code = socket.read_u16().await.unwrap();
+        println!("{}", grpc_address);
         match code {
-            code if code == DHT_PUT => handle_put(&mut socket, size).await,
-            code if code == DHT_GET => handle_get(&mut socket).await,
+            code if code == DHT_PUT => handle_put(&grpc_address, &mut socket, size).await,
+            code if code == DHT_GET => handle_get(&grpc_address, &mut socket).await,
             _ => panic!("invalid code {}", code)
         }.unwrap();
     }
     Ok(())
 }
 
-async fn handle_get(socket: &mut TcpStream) -> Result<(), Box<dyn Error>> {
-    info!("Processing GET...");
-    let mut key: [u8; 32] = [0; 32];
-    socket.read_exact(&mut key).await?;
+async fn handle_get(grpc_address: &String, socket: &mut TcpStream) -> Result<(), Box<dyn Error>> {
+    let mut key_array: [u8; 32] = [0; 32];
+    socket.read_exact(&mut key_array).await?;
+    info!("Processing GET for key {:?}", key_array);
+    let key: Key = crypto::hash(key_array.as_slice());
 
-    // todo: handle get
-    send_dht_success(socket, key, vec![1, 2, 3, 4, 5, 6, 7]).await?;
+    let mut local_node_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", grpc_address))
+        .await
+        .unwrap();
+    let response = local_node_client.find_successor(Request::new(KeyMsg {
+        key: key.to_be_bytes().to_vec()
+    })).await.unwrap();
+
+    let responsible_node_address  = &response.get_ref().address;
+    let mut responsible_node_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", responsible_node_address))
+        .await
+        .unwrap();
+    let response = responsible_node_client.get(Request::new(KeyMsg {
+        key: key.to_be_bytes().to_vec()
+    })).await.unwrap();
+
+
+    send_dht_success(socket, key_array, response.get_ref().value.as_bytes().to_vec()).await?;
     // send_dht_failure(socket, key).await?;
 
     Ok(())
 }
 
-async fn handle_put(mut socket: &TcpStream, size: u16) -> Result<(), Box<dyn Error>> {
+async fn handle_put(grpc_address: &String, mut socket: &TcpStream, size: u16) -> Result<(), Box<dyn Error>> {
     info!("Processing PUT...");
-    // todo
-    Ok(())
+    todo!()
 }
 
 async fn send_dht_success(socket: &mut TcpStream, key: [u8; 32], value: Vec<u8>) -> Result<(), Box<dyn Error>> {
