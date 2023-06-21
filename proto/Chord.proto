@@ -60,6 +60,10 @@ message PutRequest {
   string value = 4;
 }
 
+message GetKvStoreSizeResponse {
+  uint32 size = 1;
+}
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
@@ -72,6 +76,7 @@ service Chord {
 
   // debugging
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
+  rpc GetKvStoreSize (Empty) returns (GetKvStoreSizeResponse);
 
   // Hashtable calls
   rpc Get(KeyMsg) returns (GetResponse);

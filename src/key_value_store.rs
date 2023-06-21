@@ -10,6 +10,7 @@ pub trait KVStore {
     fn get(&self, key: &Key) -> Option<&Value>;
     fn put(&mut self, key: &Key, value: &Value) -> bool;
     fn iter(&self, limit: Key) -> Take<Iter>;
+    fn size(&self) -> usize;
 }
 
 
@@ -32,5 +33,9 @@ impl KVStore for HashMapStore {
 
     fn iter(&self, limit: Key) -> Take<Iter> {
         todo!()
+    }
+
+    fn size(&self) -> usize {
+        self.map.keys().len()
     }
 }

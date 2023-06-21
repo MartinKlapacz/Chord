@@ -5,7 +5,7 @@ use log::{error, info, warn};
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
@@ -239,6 +239,12 @@ impl chord_proto::chord_server::Chord for ChordService {
         }))
     }
 
+    async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
+        Ok(Response::new(GetKvStoreSizeResponse {
+            size: self.kv_store.lock().unwrap().size() as u32
+        }))
+    }
+
     async fn get(&self, request: Request<KeyMsg>) -> Result<Response<GetResponse>, Status> {
         let key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
         let predecessor_address = {
@@ -281,4 +287,6 @@ impl chord_proto::chord_server::Chord for ChordService {
         info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty{}))
     }
+
+
 }
