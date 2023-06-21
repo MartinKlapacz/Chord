@@ -270,7 +270,15 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
-        println!("received put request");
+        let key = Key::from_be_bytes(request.get_ref().key.clone().unwrap().key.try_into().unwrap());
+        let ttl = request.get_ref().ttl;
+        let replication = request.get_ref().replication;
+        let value = &request.get_ref().value;
+
+        // todo: handle ttl
+        // todo: handle replication
+        let is_update = self.kv_store.lock().unwrap().put(&key, value);
+        info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty{}))
     }
 }
