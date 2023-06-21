@@ -9,15 +9,14 @@ use tonic::transport::Server;
 use crate::chord::{ChordService, Address};
 use crate::chord::chord_proto::chord_server::ChordServer;
 use crate::cli::Cli;
-use crate::finger_table::{FingerEntry, FingerTable};
 use crate::join::process_node_join;
 use crate::tcp_service::handle_client_connection;
 
+mod node;
 mod chord;
 mod tcp_service;
 mod crypto;
 mod cli;
-mod finger_table;
 mod join;
 mod constants;
 mod key_value_store;

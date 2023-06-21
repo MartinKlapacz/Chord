@@ -9,8 +9,9 @@ use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerT
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
-use crate::finger_table::{FingerEntry, FingerTable};
 use crate::key_value_store::{HashMapStore, KVStore};
+use crate::node::finger_entry::FingerEntry;
+use crate::node::finger_table::FingerTable;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
