@@ -10,7 +10,7 @@ use tonic::transport::Channel;
 use chord::crypto;
 use chord::crypto::Key;
 use crate::chord::chord_proto::chord_client::ChordClient;
-use crate::chord::chord_proto::{KeyMsg, PutRequest};
+use crate::chord::chord_proto::{GetStatus, KeyMsg, PutRequest};
 use crate::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 
 
@@ -31,7 +31,6 @@ pub async fn handle_client_connection(mut socket: TcpStream, grpc_address: &Stri
             code if code == DHT_GET => handle_get(&grpc_address, &mut socket).await,
             _ => panic!("invalid code {}", code)
         };
-        print!("hello");
     }
     Ok(())
 }
@@ -49,8 +48,15 @@ async fn handle_get(grpc_address: &String, socket: &mut TcpStream) -> Result<(),
         key: key.to_be_bytes().to_vec()
     })).await.unwrap();
 
-    send_dht_success(socket, key_array, response.get_ref().value.as_bytes().to_vec()).await?;
-    // send_dht_failure(socket, key).await?;
+    match GetStatus::from_i32(response.get_ref().status) {
+        Some(GetStatus::Ok) => {
+            send_dht_success(socket, key_array, response.get_ref().value.as_bytes().to_vec()).await?;
+        },
+        Some(GetStatus::NotFound)  => {
+            send_dht_failure(socket, key_array).await?;
+        },
+        None => panic!("Received invalid get response status")
+    }
 
     Ok(())
 }
