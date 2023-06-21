@@ -43,8 +43,29 @@ message UpdateFingerTableEntryRequest {
   FingerEntryMsg fingerEntry = 2;
 }
 
+enum GetStatus {
+  OK = 0;
+  NOT_FOUND = 1;
+}
+
+message GetResponse {
+  string value = 1;
+  GetStatus status = 2;
+}
+
+message PutRequest {
+  KeyMsg key = 1;
+  uint64 ttl = 2;
+  uint32 replication = 3;
+  string value = 4;
+}
+
+message GetKvStoreSizeResponse {
+  uint32 size = 1;
+}
 
 service Chord {
+  // chord protocol
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
   rpc FindPredecessor (KeyMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
@@ -53,6 +74,11 @@ service Chord {
   rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
   rpc FindClosestPrecedingFinger (KeyMsg) returns (FingerEntryMsg);
 
-  // debug
+  // debugging
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
+  rpc GetKvStoreSize (Empty) returns (GetKvStoreSizeResponse);
+
+  // Hashtable calls
+  rpc Get(KeyMsg) returns (GetResponse);
+  rpc Put(PutRequest) returns (Empty);
 }

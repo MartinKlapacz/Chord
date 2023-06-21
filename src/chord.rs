@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
-use log::info;
+use log::{error, info, warn};
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, KeyMsg, NodeSummaryMsg, UpdateFingerTableEntryRequest};
+use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
@@ -23,7 +23,7 @@ pub struct ChordService {
     pos: Key,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor: Arc<Mutex<FingerEntry>>,
-    kv_store: Arc<Mutex<dyn KVStore + Send>>
+    kv_store: Arc<Mutex<dyn KVStore + Send>>,
 }
 
 
@@ -32,7 +32,7 @@ impl ChordService {
         let (finger_table, predecessor) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
-            pos: crypto::hash(&url),
+            pos: crypto::hash(&url.as_bytes()),
             finger_table: Arc::new(Mutex::new(finger_table)),
             predecessor: Arc::new(Mutex::new(predecessor)),
             kv_store: Arc::new(Mutex::new(HashMapStore::default())),
@@ -113,14 +113,14 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         // current
         let mut current_address: Address = self.address.clone();
-        let mut current_key: Key = crypto::hash(&current_address);
+        let mut current_key: Key = crypto::hash(&current_address.as_bytes());
 
         // successor
         let mut current_successor_address: Address = {
             let finger_table_guard = self.finger_table.lock().unwrap();
             finger_table_guard.fingers[0].get_address().clone()
         };
-        let mut current_successor_key: Key = crypto::hash(&current_successor_address);
+        let mut current_successor_key: Key = crypto::hash(&current_successor_address.as_bytes());
 
 
         while (!is_between(look_up_key, current_key, current_successor_key, true, false)) && current_key != current_successor_key {
@@ -144,7 +144,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
             // update successor
             current_successor_address = response.get_ref().into();
-            current_successor_key = crypto::hash(&current_successor_address);
+            current_successor_key = crypto::hash(&current_successor_address.as_bytes());
         }
 
         Ok(Response::new(current_address.into()))
@@ -185,7 +185,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
 
-        let upper_key = crypto::hash(&upper_finger.get_address());
+        let upper_key = crypto::hash(&upper_finger.get_address().as_bytes());
         let lower_key = self.pos.overflowing_add(Key::two().overflowing_pow(index_to_update as u32).0).0 as Key;
         // let lower_key = self.pos;
         if is_between(finger_entry_update_key, lower_key, upper_key, false, true) {
@@ -210,7 +210,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn find_closest_preceding_finger(&self, request: Request<KeyMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = Key::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
-            let node_pos = crypto::hash(finger.get_address());
+            let node_pos = crypto::hash(finger.get_address().as_bytes());
             if is_between(node_pos, self.pos, key, true, true) {
                 return Ok(Response::new(FingerEntryMsg {
                     id: node_pos.to_be_bytes().to_vec(),
@@ -223,7 +223,6 @@ impl chord_proto::chord_server::Chord for ChordService {
             address: self.address.clone().into(),
         }))
     }
-
 
     async fn get_node_summary(&self, _: Request<Empty>) -> Result<Response<NodeSummaryMsg>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
@@ -239,4 +238,55 @@ impl chord_proto::chord_server::Chord for ChordService {
                 .collect(),
         }))
     }
+
+    async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
+        Ok(Response::new(GetKvStoreSizeResponse {
+            size: self.kv_store.lock().unwrap().size() as u32
+        }))
+    }
+
+    async fn get(&self, request: Request<KeyMsg>) -> Result<Response<GetResponse>, Status> {
+        let key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
+        let predecessor_address = {
+            self.predecessor.lock().unwrap().get_address().clone()
+        };
+        let predecessor_key = crypto::hash(predecessor_address.as_bytes());
+        if is_between(key, predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
+            match self.kv_store.lock().unwrap().get(&key) {
+                Some(value) => {
+                    info!("Get request for key {}, value = {}", key, value);
+                    Ok(Response::new(GetResponse {
+                        value: value.clone(),
+                        status: GetStatus::Ok.into(),
+                    }))
+                }
+                None => {
+                    Ok(Response::new(GetResponse {
+                        value: String::default(),
+                        status: GetStatus::NotFound.into()
+                    }))
+                }
+            }
+        } else {
+            error!("Invalid key {}!", key);
+            error!("This node is responsible for interval ({}, {}] !", predecessor_key, self.pos);
+            let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
+            Err(Status::internal(msg))
+        }
+    }
+
+    async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
+        let key = Key::from_be_bytes(request.get_ref().key.clone().unwrap().key.try_into().unwrap());
+        let ttl = request.get_ref().ttl;
+        let replication = request.get_ref().replication;
+        let value = &request.get_ref().value;
+
+        // todo: handle ttl
+        // todo: handle replication
+        let is_update = self.kv_store.lock().unwrap().put(&key, value);
+        info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
+        Ok(Response::new(Empty{}))
+    }
+
+
 }

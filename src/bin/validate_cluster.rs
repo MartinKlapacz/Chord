@@ -61,7 +61,7 @@ async fn main() {
         let fingers = &node_summaries[i].finger_entries;
         for (j, finger) in fingers.iter().enumerate() {
             let finger_key: Key = finger.id.parse::<Key>().unwrap();
-            let node_key_pointed_to = crypto::hash(&finger.address);
+            let node_key_pointed_to = crypto::hash(&finger.address.as_bytes());
             let actually_responsible_node_key = get_responsible_node_for_key(finger_key, &node_ids);
             let actually_responsible_node_address = get_node_address_for_key(&actually_responsible_node_key, &node_summaries);
             if node_key_pointed_to.ne(&actually_responsible_node_key) {
