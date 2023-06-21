@@ -5,7 +5,7 @@ use log::{error, info, warn};
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, UpdateFingerTableEntryRequest};
+use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::crypto;
 use crate::crypto::{HashRingKey, Key};
@@ -267,5 +267,10 @@ impl chord_proto::chord_server::Chord for ChordService {
             let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
             Err(Status::internal(msg))
         }
+    }
+
+    async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
+        println!("received put request");
+        Ok(Response::new(Empty{}))
     }
 }

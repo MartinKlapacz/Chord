@@ -53,6 +53,13 @@ message GetResponse {
   GetStatus status = 2;
 }
 
+message PutRequest {
+  KeyMsg key = 1;
+  uint64 ttl = 2;
+  uint32 replication = 3;
+  string value = 4;
+}
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
@@ -68,4 +75,5 @@ service Chord {
 
   // Hashtable calls
   rpc Get(KeyMsg) returns (GetResponse);
+  rpc Put(PutRequest) returns (Empty);
 }
