@@ -5,12 +5,14 @@ use log::{error, info, warn};
 use tokio::sync::oneshot::Receiver;
 use tonic::{Request, Response, Status};
 
-use crate::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
-use crate::chord::chord_proto::chord_client::ChordClient;
-use crate::crypto;
-use crate::crypto::{HashRingKey, Key};
-use crate::finger_table::{FingerEntry, FingerTable};
-use crate::key_value_store::{HashMapStore, KVStore};
+use crate::threads::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::chord_client::ChordClient;
+use crate::utils::crypto::{HashRingKey, Key};
+use crate::kv::hash_map_store::HashMapStore;
+use crate::node::finger_entry::FingerEntry;
+use crate::node::finger_table::FingerTable;
+use crate::kv::kv_store::{Value, KVStore};
+use crate::utils::crypto;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");

@@ -1,52 +1,9 @@
-use std::fmt::{Debug, Pointer};
-use std::fmt;
-use simple_logger::init;
+use crate::threads::chord::Address;
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, KeyMsg};
+use crate::node::finger_entry::FingerEntry;
 
-use crate::chord::Address;
-use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
-use crate::crypto;
-use crate::crypto::{HashRingKey, Key};
-
-#[derive(Debug, Clone)]
-pub struct FingerTable {
-    pub fingers: Vec<FingerEntry>,
-}
-
-#[derive(Clone)]
-pub struct FingerEntry {
-    key: Key,
-    address: Address,
-}
-
-impl Debug for FingerEntry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("")
-            .field("key", &self.key)
-            .field("address", &self.address)
-            .finish()
-    }
-}
-
-impl FingerEntry {
-    pub fn new(key: &Key, address: &Address) -> Self {
-        FingerEntry {
-            address: address.clone(),
-            key: key.clone(),
-        }
-    }
-
-    pub fn get_key(&self) -> &Key {
-        &self.key
-    }
-
-    pub fn get_address(&self) -> &Address {
-        &self.address
-    }
-
-    pub fn get_address_mut(&mut self) -> &mut Address {
-        &mut self.address
-    }
-}
+use crate::utils::crypto;
+use crate::utils::crypto::Key;
 
 impl Into<FingerEntryMsg> for AddressMsg {
     fn into(self) -> FingerEntryMsg {
@@ -254,41 +211,3 @@ impl Into<FingerEntryDebugMsg> for &FingerEntry {
         self.clone().into()
     }
 }
-
-
-impl FingerTable {
-    pub fn new(key: &Key, address: &Address) -> FingerTable {
-        let mut fingers = Vec::new();
-        for i in 0..Key::finger_count() {
-            fingers.push(FingerEntry {
-                // key: (key + 2u128.pow(i as u32)) % 2u128.pow(finger_count as u32),
-                key: key.overflowing_add(Key::one().overflowing_shl(i as u32).0).0,
-                address: address.clone(),
-            });
-        };
-        FingerTable { fingers }
-    }
-
-    pub fn set_finger(&mut self, index: usize, address: Address) -> () {
-        self.fingers[index].address = address;
-    }
-
-    pub fn set_all_fingers(&mut self, address: &Address) -> () {
-        for mut finger in &mut self.fingers {
-            finger.address = address.clone();
-        }
-    }
-}
-
-impl Into<FingerTableMsg> for FingerTable {
-    fn into(self) -> FingerTableMsg {
-        let mut fingers = Vec::new();
-        for finger in self.fingers {
-            fingers.push(finger.into());
-        }
-        FingerTableMsg { fingers }
-    }
-}
-
-
-
