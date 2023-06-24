@@ -6,18 +6,16 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
 
-use crate::chord::{ChordService, Address};
-use crate::chord::chord_proto::chord_server::ChordServer;
+use crate::threads::chord::{ChordService, Address};
+use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::utils::cli::Cli;
-use crate::join::process_node_join;
-use crate::tcp_service::handle_client_connection;
+use crate::threads::join::process_node_join;
+use crate::threads::tcp_service::handle_client_connection;
 
 mod node;
-mod chord;
-mod tcp_service;
-mod join;
 mod utils;
 mod kv;
+mod threads;
 
 
 pub mod chord_proto {

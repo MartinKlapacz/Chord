@@ -1,5 +1,5 @@
-use crate::chord::Address;
-use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, KeyMsg};
+use crate::threads::chord::Address;
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, KeyMsg};
 use crate::node::finger_entry::FingerEntry;
 
 use crate::utils::crypto;

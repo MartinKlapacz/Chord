@@ -1,5 +1,3 @@
-use std::hash::Hash;
-use std::mem;
 use std::mem::size_of;
 
 use blake3::Hasher;
@@ -16,7 +14,7 @@ pub trait HashRingKey {
 
 impl HashRingKey for Key {
     fn size() -> usize {
-        mem::size_of::<Key>()
+        size_of::<Key>()
     }
 
     fn one() -> Key {

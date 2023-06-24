@@ -6,12 +6,13 @@ use log::info;
 use tokio::sync::oneshot::Sender;
 use tonic::Request;
 
-use crate::chord::Address;
-use crate::chord::chord_proto::{AddressMsg, Empty, UpdateFingerTableEntryRequest};
-use crate::chord::chord_proto::chord_client::ChordClient;
+use crate::threads::chord::Address;
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{HashRingKey, Key, hash};
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
+use crate::node::conversions::*;
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String, tx: Sender<(FingerTable, FingerEntry)>) -> Result<(), Box<dyn Error>> {
     let own_id = hash(own_grpc_address_str.as_bytes());

@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Pointer};
 
-use crate::chord::Address;
-use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
+use crate::threads::chord::Address;
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
 use crate::utils::crypto::{HashRingKey, Key};
 use crate::node::finger_entry::FingerEntry;
 
