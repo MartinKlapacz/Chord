@@ -3,15 +3,7 @@ use std::iter::Take;
 use std::path::Iter;
 
 use crate::crypto::Key;
-
-type Value = String;
-
-pub trait KVStore {
-    fn get(&self, key: &Key) -> Option<&Value>;
-    fn put(&mut self, key: &Key, value: &Value) -> bool;
-    fn iter(&self, limit: Key) -> Take<Iter>;
-    fn size(&self) -> usize;
-}
+use crate::kv::kv_store::{KVStore, Value};
 
 
 #[derive(Default)]

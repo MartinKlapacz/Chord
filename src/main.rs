@@ -19,7 +19,7 @@ mod crypto;
 mod cli;
 mod join;
 mod constants;
-mod key_value_store;
+mod kv;
 
 
 pub mod chord_proto {
