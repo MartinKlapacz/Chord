@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::chord::Address;
 use crate::chord::chord_proto::{FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
-use crate::crypto::Key;
+use crate::utils::crypto::Key;
 
 
 #[derive(Clone)]

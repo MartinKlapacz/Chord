@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::iter::Take;
 use std::path::Iter;
 
-use crate::crypto::Key;
+use crate::utils::crypto::Key;
 use crate::kv::kv_store::{KVStore, Value};
 
 

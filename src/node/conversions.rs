@@ -1,8 +1,9 @@
-use chord::crypto;
-use chord::crypto::Key;
 use crate::chord::Address;
 use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, KeyMsg};
 use crate::node::finger_entry::FingerEntry;
+
+use crate::utils::crypto;
+use crate::utils::crypto::Key;
 
 impl Into<FingerEntryMsg> for AddressMsg {
     fn into(self) -> FingerEntryMsg {

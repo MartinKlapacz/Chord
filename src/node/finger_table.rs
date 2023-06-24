@@ -2,8 +2,7 @@ use std::fmt::{Debug, Pointer};
 
 use crate::chord::Address;
 use crate::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
-use crate::crypto;
-use crate::crypto::{HashRingKey, Key};
+use crate::utils::crypto::{HashRingKey, Key};
 use crate::node::finger_entry::FingerEntry;
 
 #[derive(Debug, Clone)]

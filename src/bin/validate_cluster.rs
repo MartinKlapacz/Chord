@@ -6,9 +6,10 @@ use tokio::process::{Child, Command};
 use tokio::time::{Duration, sleep};
 use tonic::Request;
 use tonic::transport::Channel;
+use chord::utils;
+use chord::utils::crypto::Key;
 
-use chord::crypto;
-use chord::crypto::Key;
+use utils::crypto;
 
 use crate::chord_proto::{Empty, NodeSummaryMsg};
 use crate::chord_proto::chord_client::ChordClient;

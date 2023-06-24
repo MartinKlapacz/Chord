@@ -7,11 +7,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tonic::Request;
 use tonic::transport::Channel;
-use chord::crypto;
-use chord::crypto::Key;
 use crate::chord::chord_proto::chord_client::ChordClient;
 use crate::chord::chord_proto::{GetStatus, KeyMsg, PutRequest};
-use crate::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
+use crate::utils::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
+use crate::utils::crypto;
+use crate::utils::crypto::Key;
 
 
 pub async fn handle_client_connection(mut socket: TcpStream, grpc_address: &String) -> Result<(), Box<dyn Error>> {
