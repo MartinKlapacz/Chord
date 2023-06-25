@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::process::exit;
 
 use clap::Parser;
 use log::{info, LevelFilter};
@@ -79,6 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     thread_handles.push(tokio::spawn(async move {
         shutdown_handoff(rx_shutdown_handoff).await.unwrap();
+        exit(0)
     }));
 
     for handle in thread_handles {
