@@ -6,7 +6,7 @@ use crate::utils::crypto::Key;
 use crate::kv::kv_store::{KVStore, Value};
 
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct HashMapStore {
     map: HashMap<Key, Value>,
 }
