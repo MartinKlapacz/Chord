@@ -61,7 +61,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
             let kv_store_arc = Arc::new(Mutex::new(HashMapStore::default()));
             tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
-            tx2.send((finger_table_arc.clone(), kv_store_arc.clone())).unwrap();
+            tx2.send((finger_table_arc, kv_store_arc)).unwrap();
 
             info!("Updating other nodes...");
             for index in 0..finger_table_len {
@@ -90,7 +90,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
             let kv_store_arc = Arc::new(Mutex::new(HashMapStore::default()));
             tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
-            tx2.send((finger_table_arc.clone(), kv_store_arc.clone())).unwrap();
+            tx2.send((finger_table_arc, kv_store_arc)).unwrap();
         }
     };
 
