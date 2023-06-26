@@ -64,12 +64,17 @@ message GetKvStoreSizeResponse {
   uint32 size = 1;
 }
 
+message KvPairMsg {
+  bytes key = 1;
+  string value = 2;
+}
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (KeyMsg) returns (AddressMsg);
   rpc FindPredecessor (KeyMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
-  rpc SetPredecessor (AddressMsg) returns (Data);
+  rpc SetPredecessor (AddressMsg) returns (stream KvPairMsg);
   rpc GetDirectSuccessor (Empty) returns (AddressMsg);
   rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
   rpc FindClosestPrecedingFinger (KeyMsg) returns (FingerEntryMsg);

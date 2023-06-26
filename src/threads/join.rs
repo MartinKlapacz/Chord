@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::ops::Add;
@@ -5,9 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use log::info;
 use tokio::sync::oneshot::Sender;
+use tokio_stream::StreamExt;
 use tonic::Request;
 use crate::kv::hash_map_store::HashMapStore;
-use crate::kv::kv_store::KVStore;
+use crate::kv::kv_store::{KVStore, Value};
 
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
@@ -23,6 +25,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
 
     let mut finger_table = FingerTable::new(&own_id, own_grpc_address_str);
     let mut predecessor: AddressMsg = own_grpc_address_str.clone().into();
+    let kv_store_arc = Arc::new(Mutex::new(HashMapStore::default()));
 
     match peer_address_option {
         Some(peer_address_str) => {
@@ -47,9 +50,22 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             predecessor = get_predecessor_response.get_ref().clone().into();
             info!("Received predecessor from peer");
 
-            let data = direct_successor_client.set_predecessor(Request::new(own_grpc_address_str.into()))
+
+            let mut kv_pair_stream = direct_successor_client.set_predecessor(Request::new(own_grpc_address_str.into()))
                 .await
-                .unwrap();
+                .unwrap().into_inner();
+            while let Some(kv_pair) = kv_pair_stream.next().await {
+                match kv_pair {
+                    Ok(item) => {
+                        kv_store_arc.lock().unwrap().put(&Key::one(), &Value::default());
+                    },
+                    Err(err) => {
+                        println!("{}", err);
+                    }
+                }
+            }
+
+
 
             // todo: store data and make available to grpc service
             let finger_entry_peer: FingerEntry = peer_address_str.into();
@@ -59,7 +75,6 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             let finger_table_len = finger_table.fingers.len();
             // finger table is constructed, send it to grpc thread and shotdown thread
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
-            let kv_store_arc = Arc::new(Mutex::new(HashMapStore::default()));
             tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
             tx2.send((finger_table_arc, kv_store_arc)).unwrap();
 
@@ -88,7 +103,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             info!("Starting up a new cluster");
             finger_table.set_all_fingers(&own_grpc_address_str);
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
-            let kv_store_arc = Arc::new(Mutex::new(HashMapStore::default()));
+
             tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
             tx2.send((finger_table_arc, kv_store_arc)).unwrap();
         }

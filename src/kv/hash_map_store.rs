@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::iter::Take;
 use std::path::Iter;
 
-use crate::utils::crypto::Key;
 use crate::kv::kv_store::{KVStore, Value};
-
+use crate::threads::chord::is_between;
+use crate::utils::crypto::Key;
 
 #[derive(Default, Debug)]
 pub struct HashMapStore {
@@ -23,9 +23,11 @@ impl KVStore for HashMapStore {
         exists
     }
 
-    fn iter(&self, limit: Key) -> Take<Iter> {
-        todo!()
+    fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(&Key, &Value)>> {
+            // .filter(|(&key, &value)| is_between(key, lower, upper, true, false));
+        Box::new(self.map.iter())
     }
+
 
     fn size(&self) -> usize {
         self.map.keys().len()

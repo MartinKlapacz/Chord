@@ -1,16 +1,20 @@
 use std::error::Error;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use log::{error, info, warn};
+use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
+use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status};
 
-use crate::threads::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
-use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{HashRingKey, Key};
+use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::kv::kv_store::{KVStore};
+use crate::threads::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::chord_client::ChordClient;
+use crate::utils::crypto::{HashRingKey, Key};
 use crate::utils::crypto;
 
 pub mod chord_proto {
@@ -24,7 +28,7 @@ pub struct ChordService {
     pos: Key,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor: Arc<Mutex<FingerEntry>>,
-    kv_store: Arc<Mutex<dyn KVStore + Send>>,
+    kv_store_arc: Arc<Mutex<dyn KVStore + Send>>,
 }
 
 
@@ -36,7 +40,7 @@ impl ChordService {
             pos: crypto::hash(&url.as_bytes()),
             finger_table,
             predecessor: Arc::new(Mutex::new(predecessor)),
-            kv_store,
+            kv_store_arc: kv_store,
         }
     }
 
@@ -157,14 +161,47 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(finger_entry.clone().into()))
     }
 
-    async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Data>, Status> {
+    type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
+
+    async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Self::SetPredecessorStream>, Status> {
         let new_predecessor: FingerEntry = request.get_ref().into();
+        let upper = new_predecessor.key;
 
         info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
-        let mut predecessor = self.predecessor.lock().unwrap();
-        *predecessor = new_predecessor;
-        Ok(Response::new(Data {}))
+
+        let limit: Key = {
+            let mut predecessor = self.predecessor.lock().unwrap();
+            *predecessor = new_predecessor;
+            predecessor.key
+        };
+
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        let kv_store_arc = self.kv_store_arc.clone();
+
+        let lower = {
+            self.predecessor.lock().unwrap().key
+        };
+
+        tokio::spawn(async move {
+            let kv_store_guard = kv_store_arc.lock().unwrap();
+            let kv_store_iter = kv_store_guard.iter(lower, upper);
+            for (key, value) in kv_store_iter {
+                println!("handing over pair ({}, {})", key, value);
+
+                if let Err(err) = tx.send(Ok(KvPairMsg {
+                    key: key.to_be_bytes().to_vec(),
+                    value: value.clone(),
+                })) {
+                    println!("ERROR: failed to update stream client: {:?}", err);
+                };
+            }
+        });
+
+        let stream = UnboundedReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(stream) as Self::SetPredecessorStream))
     }
+
 
     async fn get_direct_successor(&self, _: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap().fingers[0].clone();
@@ -242,7 +279,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
         Ok(Response::new(GetKvStoreSizeResponse {
-            size: self.kv_store.lock().unwrap().size() as u32
+            size: self.kv_store_arc.lock().unwrap().size() as u32
         }))
     }
 
@@ -253,7 +290,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
         let predecessor_key = crypto::hash(predecessor_address.as_bytes());
         if is_between(key, predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
-            match self.kv_store.lock().unwrap().get(&key) {
+            match self.kv_store_arc.lock().unwrap().get(&key) {
                 Some(value) => {
                     info!("Get request for key {}, value = {}", key, value);
                     Ok(Response::new(GetResponse {
@@ -264,7 +301,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 None => {
                     Ok(Response::new(GetResponse {
                         value: String::default(),
-                        status: GetStatus::NotFound.into()
+                        status: GetStatus::NotFound.into(),
                     }))
                 }
             }
@@ -284,10 +321,8 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         // todo: handle ttl
         // todo: handle replication
-        let is_update = self.kv_store.lock().unwrap().put(&key, value);
+        let is_update = self.kv_store_arc.lock().unwrap().put(&key, value);
         info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
-        Ok(Response::new(Empty{}))
+        Ok(Response::new(Empty {}))
     }
-
-
 }
