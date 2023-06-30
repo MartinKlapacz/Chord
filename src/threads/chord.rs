@@ -2,7 +2,7 @@ use std::error::Error;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
@@ -184,18 +184,22 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
         tokio::spawn(async move {
-            let kv_store_guard = kv_store_arc.lock().unwrap();
+            let mut kv_store_guard = kv_store_arc.lock().unwrap();
             let kv_store_iter = kv_store_guard.iter(lower, upper);
+            info!("Handing over data from {} to {}", lower, upper);
+            let mut pair_count = 0;
             for (key, value) in kv_store_iter {
-                println!("handing over pair ({}, {})", key, value);
-
+                debug!("Handing over KV pair ({}, {})", key, value);
                 if let Err(err) = tx.send(Ok(KvPairMsg {
                     key: key.to_be_bytes().to_vec(),
                     value: value.clone(),
                 })) {
-                    println!("ERROR: failed to update stream client: {:?}", err);
+                    error!("ERROR: failed to update stream client: {:?}", err);
                 };
+                pair_count += 1;
             }
+            info!("Data handoff finished, transfered {} pairs", pair_count)
+
         });
 
         let stream = UnboundedReceiverStream::new(rx);

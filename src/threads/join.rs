@@ -4,13 +4,13 @@ use std::error::Error;
 use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
-use log::info;
+use log::{debug, info};
 use tokio::sync::oneshot::Sender;
 use tokio_stream::StreamExt;
 use tonic::Request;
+
 use crate::kv::hash_map_store::HashMapStore;
 use crate::kv::kv_store::{KVStore, Value};
-
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::Address;
@@ -54,17 +54,20 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             let mut kv_pair_stream = direct_successor_client.set_predecessor(Request::new(own_grpc_address_str.into()))
                 .await
                 .unwrap().into_inner();
+            info!("Receiving data through data handoff...");
             while let Some(kv_pair) = kv_pair_stream.next().await {
                 match kv_pair {
                     Ok(item) => {
-                        kv_store_arc.lock().unwrap().put(&Key::one(), &Value::default());
-                    },
+                        let key = Key::from_be_bytes(item.key.try_into().unwrap());
+                        kv_store_arc.lock().unwrap().put(&key, &item.value);
+                        debug!("Received KV pair ({}, {}) from successor", key, item.value);
+                    }
                     Err(err) => {
                         println!("{}", err);
                     }
                 }
             }
-
+            info!("Data received, handoff finished!");
 
 
             // todo: store data and make available to grpc service

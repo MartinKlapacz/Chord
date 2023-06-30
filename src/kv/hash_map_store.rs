@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::iter::Take;
 use std::path::Iter;
 
@@ -23,9 +23,18 @@ impl KVStore for HashMapStore {
         exists
     }
 
-    fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(&Key, &Value)>> {
-            // .filter(|(&key, &value)| is_between(key, lower, upper, true, false));
-        Box::new(self.map.iter())
+    fn iter(&mut self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(Key, Value)>> {
+
+        let keys_in_range = self.map.iter()
+            // .filter(|(k, _v)| is_between(**k, lower, upper, true, false))
+            .map(|(k, _v)| k.clone())
+            .collect::<Vec<Key>>();
+
+        let values_in_range = keys_in_range.iter().map(|k| {
+            self.map.remove(k).expect("Key not found")
+        }).collect::<Vec<Value>>();
+
+        Box::new(keys_in_range.into_iter().zip(values_in_range))
     }
 
 
