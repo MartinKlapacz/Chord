@@ -10,7 +10,8 @@ pub type Value = String;
 pub trait KVStore : Debug {
     fn get(&self, key: &Key) -> Option<&Value>;
     fn put(&mut self, key: &Key, value: &Value) -> bool;
-    fn iter(&mut self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(Key, Value)>>;
+    fn delete(&mut self, key: &Key) -> bool;
+    fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(& Key, & Value)> + '_>;
     fn size(&self) -> usize;
 }
 

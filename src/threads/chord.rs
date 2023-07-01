@@ -184,22 +184,29 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
         tokio::spawn(async move {
-            let mut kv_store_guard = kv_store_arc.lock().unwrap();
-            let kv_store_iter = kv_store_guard.iter(lower, upper);
-            info!("Handing over data from {} to {}", lower, upper);
-            let mut pair_count = 0;
-            for (key, value) in kv_store_iter {
-                debug!("Handing over KV pair ({}, {})", key, value);
-                if let Err(err) = tx.send(Ok(KvPairMsg {
-                    key: key.to_be_bytes().to_vec(),
-                    value: value.clone(),
-                })) {
-                    error!("ERROR: failed to update stream client: {:?}", err);
-                };
-                pair_count += 1;
+            let mut transferred_keys: Vec<Key> = vec![];
+            {
+                info!("Handing over data from {} to {}", lower, upper);
+                let kv_store_guard = kv_store_arc.lock().unwrap();
+                let mut pair_count = 0;
+                for (key, value) in kv_store_guard.iter(lower, upper) {
+                    transferred_keys.push(key.clone());
+                    debug!("Handing over KV pair ({}, {})", key, value);
+                    if let Err(err) = tx.send(Ok(KvPairMsg {
+                        key: key.to_be_bytes().to_vec(),
+                        value: value.clone(),
+                    })) {
+                        error!("ERROR: failed to update stream client: {:?}", err);
+                    };
+                    pair_count += 1;
+                }
+                info!("Data handoff finished, transferred {} pairs", pair_count)
             }
-            info!("Data handoff finished, transfered {} pairs", pair_count)
 
+            let mut kv_store_guard = kv_store_arc.lock().unwrap();
+            for key in &transferred_keys {
+                kv_store_guard.delete(key);
+            }
         });
 
         let stream = UnboundedReceiverStream::new(rx);

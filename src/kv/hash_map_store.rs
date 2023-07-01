@@ -23,18 +23,18 @@ impl KVStore for HashMapStore {
         exists
     }
 
-    fn iter(&mut self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(Key, Value)>> {
+    fn delete(&mut self, key: &Key) -> bool {
+        self.map.remove(key).is_some()
+    }
 
+
+    fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
         let keys_in_range = self.map.iter()
+            // todo
             // .filter(|(k, _v)| is_between(**k, lower, upper, true, false))
-            .map(|(k, _v)| k.clone())
-            .collect::<Vec<Key>>();
+            .into_iter();
 
-        let values_in_range = keys_in_range.iter().map(|k| {
-            self.map.remove(k).expect("Key not found")
-        }).collect::<Vec<Value>>();
-
-        Box::new(keys_in_range.into_iter().zip(values_in_range))
+        Box::new(keys_in_range)
     }
 
 
