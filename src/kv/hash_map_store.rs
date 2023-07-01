@@ -1,12 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::iter::Take;
 use std::path::Iter;
 
-use crate::utils::crypto::Key;
 use crate::kv::kv_store::{KVStore, Value};
+use crate::utils::crypto::{Key, is_between};
 
-
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct HashMapStore {
     map: HashMap<Key, Value>,
 }
@@ -23,9 +22,18 @@ impl KVStore for HashMapStore {
         exists
     }
 
-    fn iter(&self, limit: Key) -> Take<Iter> {
-        todo!()
+    fn delete(&mut self, key: &Key) -> bool {
+        self.map.remove(key).is_some()
     }
+
+
+    fn iter(&self, lower: Key, upper: Key, left_open: bool, right_open: bool) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
+        let keys_in_range = self.map.iter()
+            .filter(move |(key, _)| is_between(**key, lower, upper, left_open, right_open))
+            .into_iter();
+        Box::new(keys_in_range)
+    }
+
 
     fn size(&self) -> usize {
         self.map.keys().len()

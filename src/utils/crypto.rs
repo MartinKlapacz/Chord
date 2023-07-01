@@ -37,3 +37,30 @@ pub fn hash(input: &[u8]) -> Key {
     let bytes = *hash.as_bytes();
     Key::from_le_bytes(bytes[0..Key::size()].try_into().unwrap())
 }
+
+pub fn is_between(key: Key, lower: Key, upper: Key, left_open: bool, right_open: bool) -> bool {
+    if lower < upper {
+        if left_open && right_open {
+            return lower < key && key < upper;
+        } else if left_open {
+            return lower < key && key <= upper;
+        } else if right_open {
+            return lower <= key && key < upper;
+        } else {
+            return lower <= key && key <= upper;
+        }
+    } else if lower > upper {
+        if left_open && right_open {
+            return lower < key || key < upper;
+        } else if left_open {
+            return lower < key || key <= upper;
+        } else if right_open {
+            return lower <= key || key < upper;
+        } else {
+            return lower <= key || key <= upper;
+        }
+    } else {
+        return !left_open && key == lower;
+    }
+}
+
