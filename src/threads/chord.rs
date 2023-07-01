@@ -160,7 +160,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 let mut pair_count = 0;
                 for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
                     transferred_keys.push(key.clone());
-                    // debug!("Handing over KV pair ({}, {})", key, value);
+                    debug!("Handing over KV pair ({:?}, {})", key, value);
                     if let Err(err) = tx.send(Ok(KvPairMsg {
                         key: key.to_vec(),
                         value: value.clone(),

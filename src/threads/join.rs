@@ -61,7 +61,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
                     Ok(item) => {
                         let key: Key = Key::try_from(item.key.to_vec()).unwrap();
                         kv_store_arc.lock().unwrap().put(&key, &item.value);
-                        // debug!("Received KV pair ({}, {}) from successor", key, item.value);
+                        debug!("Received KV pair ({:?}, {}) from successor", key, item.value);
                     }
                     Err(err) => {
                         println!("{}", err);
