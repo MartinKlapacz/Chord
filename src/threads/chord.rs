@@ -14,8 +14,7 @@ use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{HashRingKey, Key};
-use crate::utils::crypto;
+use crate::utils::crypto::{HashRingKey, is_between, Key, hash};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -37,7 +36,7 @@ impl ChordService {
         let (finger_table, predecessor, kv_store) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
-            pos: crypto::hash(&url.as_bytes()),
+            pos: hash(&url.as_bytes()),
             finger_table,
             predecessor: Arc::new(Mutex::new(predecessor)),
             kv_store_arc: kv_store,
@@ -55,32 +54,6 @@ impl ChordService {
         } else {
             return true;
         }
-    }
-}
-
-pub fn is_between(key: Key, lower: Key, upper: Key, left_open: bool, right_open: bool) -> bool {
-    if lower < upper {
-        if left_open && right_open {
-            return lower < key && key < upper;
-        } else if left_open {
-            return lower < key && key <= upper;
-        } else if right_open {
-            return lower <= key && key < upper;
-        } else {
-            return lower <= key && key <= upper;
-        }
-    } else if lower > upper {
-        if left_open && right_open {
-            return lower < key || key < upper;
-        } else if left_open {
-            return lower < key || key <= upper;
-        } else if right_open {
-            return lower <= key || key < upper;
-        } else {
-            return lower <= key || key <= upper;
-        }
-    } else {
-        return !left_open && key == lower;
     }
 }
 
@@ -118,14 +91,14 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         // current
         let mut current_address: Address = self.address.clone();
-        let mut current_key: Key = crypto::hash(&current_address.as_bytes());
+        let mut current_key: Key = hash(&current_address.as_bytes());
 
         // successor
         let mut current_successor_address: Address = {
             let finger_table_guard = self.finger_table.lock().unwrap();
             finger_table_guard.fingers[0].get_address().clone()
         };
-        let mut current_successor_key: Key = crypto::hash(&current_successor_address.as_bytes());
+        let mut current_successor_key: Key = hash(&current_successor_address.as_bytes());
 
 
         while (!is_between(look_up_key, current_key, current_successor_key, true, false)) && current_key != current_successor_key {
@@ -149,7 +122,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
             // update successor
             current_successor_address = response.get_ref().into();
-            current_successor_key = crypto::hash(&current_successor_address.as_bytes());
+            current_successor_key = hash(&current_successor_address.as_bytes());
         }
 
         Ok(Response::new(current_address.into()))
@@ -169,19 +142,15 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
 
-        let limit: Key = {
+        let lower: Key = {
             let mut predecessor = self.predecessor.lock().unwrap();
+            let lower = predecessor.key;
             *predecessor = new_predecessor;
-            predecessor.key
+            lower
         };
-
 
         let (tx, rx) = mpsc::unbounded_channel();
         let kv_store_arc = self.kv_store_arc.clone();
-
-        let lower = {
-            self.predecessor.lock().unwrap().key
-        };
 
         tokio::spawn(async move {
             let mut transferred_keys: Vec<Key> = vec![];
@@ -234,7 +203,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
 
-        let upper_key = crypto::hash(&upper_finger.get_address().as_bytes());
+        let upper_key = hash(&upper_finger.get_address().as_bytes());
         let lower_key = self.pos.overflowing_add(Key::two().overflowing_pow(index_to_update as u32).0).0 as Key;
         // let lower_key = self.pos;
         if is_between(finger_entry_update_key, lower_key, upper_key, false, true) {
@@ -259,7 +228,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn find_closest_preceding_finger(&self, request: Request<KeyMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = Key::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
-            let node_pos = crypto::hash(finger.get_address().as_bytes());
+            let node_pos = hash(finger.get_address().as_bytes());
             if is_between(node_pos, self.pos, key, true, true) {
                 return Ok(Response::new(FingerEntryMsg {
                     id: node_pos.to_be_bytes().to_vec(),
@@ -316,7 +285,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         let predecessor_address = {
             self.predecessor.lock().unwrap().get_address().clone()
         };
-        let predecessor_key = crypto::hash(predecessor_address.as_bytes());
+        let predecessor_key = hash(predecessor_address.as_bytes());
         if is_between(key, predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
             match self.kv_store_arc.lock().unwrap().get(&key) {
                 Some(value) => {

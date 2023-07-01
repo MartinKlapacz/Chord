@@ -3,8 +3,7 @@ use std::iter::Take;
 use std::path::Iter;
 
 use crate::kv::kv_store::{KVStore, Value};
-use crate::threads::chord::is_between;
-use crate::utils::crypto::Key;
+use crate::utils::crypto::{Key, is_between};
 
 #[derive(Default, Debug)]
 pub struct HashMapStore {
@@ -30,8 +29,7 @@ impl KVStore for HashMapStore {
 
     fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
         let keys_in_range = self.map.iter()
-            // todo
-            // .filter(|(k, _v)| is_between(**k, lower, upper, true, false))
+            .filter(move |(k, _)| is_between(**k, lower, upper, false, false))
             .into_iter();
 
         Box::new(keys_in_range)
