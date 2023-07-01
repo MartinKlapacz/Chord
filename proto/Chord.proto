@@ -34,10 +34,6 @@ message NodeSummaryMsg {
   repeated FingerEntryDebugMsg fingerEntries = 4;
 }
 
-message Data {
-  // todo
-}
-
 message UpdateFingerTableEntryRequest {
   uint32 index = 1;
   FingerEntryMsg fingerEntry = 2;
@@ -64,13 +60,19 @@ message GetKvStoreSizeResponse {
   uint32 size = 1;
 }
 
-message GetKVStoreDataResponse {
-  repeated KvPairMsg kvPairs = 1;
-}
 
 message KvPairMsg {
   bytes key = 1;
   string value = 2;
+}
+
+message KvPairDebugMsg {
+  string key = 1;
+  string value = 2;
+}
+
+message GetKvStoreDataResponse {
+  repeated KvPairDebugMsg kvPairs = 1;
 }
 
 service Chord {
@@ -86,7 +88,7 @@ service Chord {
   // debugging
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
   rpc GetKvStoreSize (Empty) returns (GetKvStoreSizeResponse);
-  rpc GetKVStoreData (Empty) returns (GetKVStoreDataResponse)
+  rpc GetKvStoreData (Empty) returns (GetKvStoreDataResponse);
 
   // Hashtable calls
   rpc Get(KeyMsg) returns (GetResponse);

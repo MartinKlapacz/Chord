@@ -12,7 +12,7 @@ use tonic::{Request, Response, Status};
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Data, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{HashRingKey, Key};
 use crate::utils::crypto;
@@ -277,9 +277,12 @@ impl chord_proto::chord_server::Chord for ChordService {
         let finger_table_guard = self.finger_table.lock().unwrap();
         let predecessor = self.predecessor.lock().unwrap().clone();
 
+
         Ok(Response::new(NodeSummaryMsg {
             url: self.address.clone(),
-            id: self.pos.to_be_bytes().iter().map(|byte| byte.to_string()).collect::<Vec<String>>().join(" "),
+            id: self.pos.to_be_bytes().iter()
+                .map(|byte| byte.to_string())
+                .collect::<Vec<String>>().join(" "),
             predecessor: Some(predecessor.into()),
             finger_entries: finger_table_guard.fingers.iter()
                 .map(|finger| finger.clone())
@@ -293,6 +296,20 @@ impl chord_proto::chord_server::Chord for ChordService {
             size: self.kv_store_arc.lock().unwrap().size() as u32
         }))
     }
+
+    async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
+        let kv_pairs = {
+            self.kv_store_arc.lock().unwrap().iter(Key::one(), Key::one())
+                .map(|(key, value)| KvPairDebugMsg {
+                    key: key.to_be_bytes().map(|b| b.to_string()).join(" "),
+                    value: value.clone(),
+                }).collect()
+        };
+        Ok(Response::new(GetKvStoreDataResponse {
+            kv_pairs
+        }))
+    }
+
 
     async fn get(&self, request: Request<KeyMsg>) -> Result<Response<GetResponse>, Status> {
         let key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
