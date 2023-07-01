@@ -27,11 +27,10 @@ impl KVStore for HashMapStore {
     }
 
 
-    fn iter(&self, lower: Key, upper: Key) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
+    fn iter(&self, lower: Key, upper: Key, left_open: bool, right_open: bool) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
         let keys_in_range = self.map.iter()
-            .filter(move |(k, _)| is_between(**k, lower, upper, false, false))
+            .filter(move |(key, _)| is_between(**key, lower, upper, left_open, right_open))
             .into_iter();
-
         Box::new(keys_in_range)
     }
 

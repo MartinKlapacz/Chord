@@ -14,7 +14,7 @@ use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{HashRingKey, is_between, Key, hash};
+use crate::utils::crypto::{hash, HashRingKey, is_between, Key};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -158,7 +158,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 info!("Handing over data from {} to {}", lower, upper);
                 let kv_store_guard = kv_store_arc.lock().unwrap();
                 let mut pair_count = 0;
-                for (key, value) in kv_store_guard.iter(lower, upper) {
+                for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
                     transferred_keys.push(key.clone());
                     debug!("Handing over KV pair ({}, {})", key, value);
                     if let Err(err) = tx.send(Ok(KvPairMsg {
@@ -268,7 +268,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
         let kv_pairs = {
-            self.kv_store_arc.lock().unwrap().iter(Key::one(), Key::one())
+            self.kv_store_arc.lock().unwrap().iter(Key::one() + 1, Key::one(), false, false)
                 .map(|(key, value)| KvPairDebugMsg {
                     key: key.to_be_bytes().map(|b| b.to_string()).join(" "),
                     value: value.clone(),
