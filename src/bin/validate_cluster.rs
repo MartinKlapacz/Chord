@@ -7,7 +7,7 @@ use tokio::time::{Duration, sleep};
 use tonic::Request;
 use tonic::transport::Channel;
 use chord::utils;
-use chord::utils::crypto::Key;
+use chord::utils::crypto::HashPos;
 
 use utils::crypto;
 
@@ -40,16 +40,16 @@ async fn main() {
     }
 
     node_summaries.sort_by(|a: &NodeSummaryMsg, b: &NodeSummaryMsg| {
-        a.id.parse::<Key>().unwrap().cmp(&b.id.parse::<Key>().unwrap())
+        a.pos.parse::<HashPos>().unwrap().cmp(&b.pos.parse::<HashPos>().unwrap())
     });
 
-    let node_ids: Vec<Key> = node_summaries.iter()
-        .map(|node_summary: &NodeSummaryMsg| node_summary.id.parse::<Key>().unwrap())
-        .collect::<Vec<Key>>();
+    let node_ids: Vec<HashPos> = node_summaries.iter()
+        .map(|node_summary: &NodeSummaryMsg| node_summary.pos.parse::<HashPos>().unwrap())
+        .collect::<Vec<HashPos>>();
 
     // check predecessors
     for i in 0..node_summaries.len() {
-        let current_node: String = node_summaries[i].id.clone();
+        let current_node: String = node_summaries[i].pos.clone();
         let next_node_pred: String = node_summaries[(i + 1) % node_summaries.len()].predecessor.clone().unwrap().id;
 
         if current_node.ne(&next_node_pred) {
@@ -61,7 +61,7 @@ async fn main() {
     for i in 0..node_summaries.len() {
         let fingers = &node_summaries[i].finger_entries;
         for (j, finger) in fingers.iter().enumerate() {
-            let finger_key: Key = finger.id.parse::<Key>().unwrap();
+            let finger_key: HashPos = finger.id.parse::<HashPos>().unwrap();
             let node_key_pointed_to = crypto::hash(&finger.address.as_bytes());
             let actually_responsible_node_key = get_responsible_node_for_key(finger_key, &node_ids);
             let actually_responsible_node_address = get_node_address_for_key(&actually_responsible_node_key, &node_summaries);
@@ -70,7 +70,7 @@ async fn main() {
                     eprintln!("-----");
                     is_valid = false;
                 }
-                eprintln!("Node ({}, {}): Wrong finger entry! ", node_summaries[i].id, node_summaries[i].url);
+                eprintln!("Node ({}, {}): Wrong finger entry! ", node_summaries[i].pos, node_summaries[i].url);
                 eprintln!("{}-th Finger {} points to node ({}, {}) ", j, finger_key, node_key_pointed_to, &finger.address);
                 eprintln!("But node ({}, {}) is responsible for {}", actually_responsible_node_key, actually_responsible_node_address, finger_key);
                 eprintln!("-----");
@@ -84,16 +84,16 @@ async fn main() {
     }
 }
 
-fn get_responsible_node_for_key(key: Key, other_nodes: &Vec<Key>) -> Key {
+fn get_responsible_node_for_key(key: HashPos, other_nodes: &Vec<HashPos>) -> HashPos {
     *other_nodes.iter()
         .filter(|&node| key <= *node)
         .min()
         .unwrap_or(other_nodes.iter().min().unwrap())
 }
 
-fn get_node_address_for_key(key: &Key, node_summaries: &Vec<NodeSummaryMsg>) -> String {
+fn get_node_address_for_key(key: &HashPos, node_summaries: &Vec<NodeSummaryMsg>) -> String {
     node_summaries.iter()
-        .find(|node_summary| node_summary.id.parse::<Key>().unwrap().eq(key))
+        .find(|node_summary| node_summary.pos.parse::<HashPos>().unwrap().eq(key))
         .unwrap()
         .url
         .clone()

@@ -9,7 +9,7 @@ message AddressMsg {
   string address = 1;
 }
 
-message KeyMsg {
+message HashPosMsg {
   bytes key = 1;
 }
 
@@ -29,7 +29,7 @@ message FingerEntryDebugMsg {
 
 message NodeSummaryMsg {
   string url = 1;
-  string id = 2;
+  string pos = 2;
   FingerEntryDebugMsg predecessor = 3;
   repeated FingerEntryDebugMsg fingerEntries = 4;
 }
@@ -44,13 +44,17 @@ enum GetStatus {
   NOT_FOUND = 1;
 }
 
+message GetRequest {
+  bytes key = 1;
+}
+
 message GetResponse {
   string value = 1;
   GetStatus status = 2;
 }
 
 message PutRequest {
-  KeyMsg key = 1;
+  bytes key = 1;
   uint64 ttl = 2;
   uint32 replication = 3;
   string value = 4;
@@ -77,13 +81,13 @@ message GetKvStoreDataResponse {
 
 service Chord {
   // chord protocol
-  rpc FindSuccessor (KeyMsg) returns (AddressMsg);
-  rpc FindPredecessor (KeyMsg) returns (AddressMsg);
+  rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
+  rpc FindPredecessor (HashPosMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (AddressMsg);
   rpc SetPredecessor (AddressMsg) returns (stream KvPairMsg);
   rpc GetDirectSuccessor (Empty) returns (AddressMsg);
   rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
-  rpc FindClosestPrecedingFinger (KeyMsg) returns (FingerEntryMsg);
+  rpc FindClosestPrecedingFinger (HashPosMsg) returns (FingerEntryMsg);
 
   // debugging
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
@@ -91,6 +95,6 @@ service Chord {
   rpc GetKvStoreData (Empty) returns (GetKvStoreDataResponse);
 
   // Hashtable calls
-  rpc Get(KeyMsg) returns (GetResponse);
+  rpc Get(GetRequest) returns (GetResponse);
   rpc Put(PutRequest) returns (Empty);
 }

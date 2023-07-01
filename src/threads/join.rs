@@ -8,6 +8,7 @@ use log::{debug, info};
 use tokio::sync::oneshot::Sender;
 use tokio_stream::StreamExt;
 use tonic::Request;
+use chord::utils::crypto::Key;
 
 use crate::kv::hash_map_store::HashMapStore;
 use crate::kv::kv_store::{KVStore, Value};
@@ -16,7 +17,7 @@ use crate::node::finger_table::FingerTable;
 use crate::threads::chord::Address;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{hash, HashRingKey, Key};
+use crate::utils::crypto::{hash, HashRingKey, HashPos};
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String,
                                tx1: Sender<(Arc<Mutex<FingerTable>>, FingerEntry, Arc<Mutex<dyn KVStore + Send>>)>,
@@ -58,9 +59,9 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             while let Some(kv_pair) = kv_pair_stream.next().await {
                 match kv_pair {
                     Ok(item) => {
-                        let key = Key::from_be_bytes(item.key.try_into().unwrap());
+                        let key: Key = Key::try_from(item.key.to_vec()).unwrap();
                         kv_store_arc.lock().unwrap().put(&key, &item.value);
-                        debug!("Received KV pair ({}, {}) from successor", key, item.value);
+                        // debug!("Received KV pair ({}, {}) from successor", key, item.value);
                     }
                     Err(err) => {
                         println!("{}", err);
@@ -83,7 +84,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
 
             info!("Updating other nodes...");
             for index in 0..finger_table_len {
-                let key_to_find_predecessor_for: Key = own_id.overflowing_sub(Key::two().overflowing_pow(index as u32).0).0;
+                let key_to_find_predecessor_for: HashPos = own_id.overflowing_sub(HashPos::two().overflowing_pow(index as u32).0).0;
                 info!("Looking for predecessor for key: {} ", key_to_find_predecessor_for);
                 let response = join_peer_client.find_predecessor(Request::new(key_to_find_predecessor_for.into()))
                     .await

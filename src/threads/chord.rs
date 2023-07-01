@@ -12,9 +12,9 @@ use tonic::{Request, Response, Status};
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetResponse, GetStatus, KeyMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{hash, HashRingKey, is_between, Key};
+use crate::utils::crypto::{hash, HashRingKey, is_between, HashPos, Key};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -24,7 +24,7 @@ pub type Address = String;
 
 pub struct ChordService {
     address: String,
-    pos: Key,
+    pos: HashPos,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor: Arc<Mutex<FingerEntry>>,
     kv_store_arc: Arc<Mutex<dyn KVStore + Send>>,
@@ -43,7 +43,7 @@ impl ChordService {
         }
     }
 
-    pub fn is_successor_of_key(&self, key: Key) -> bool {
+    pub fn is_successor_of_key(&self, key: HashPos) -> bool {
         let predecessor_position = self.predecessor.lock().unwrap().get_key().clone();
         let own_position = self.pos.clone();
 
@@ -62,9 +62,9 @@ impl ChordService {
 impl chord_proto::chord_server::Chord for ChordService {
     async fn find_successor(
         &self,
-        request: Request<chord_proto::KeyMsg>,
+        request: Request<chord_proto::HashPosMsg>,
     ) -> Result<Response<chord_proto::AddressMsg>, Status> {
-        let key_msg: &KeyMsg = request.get_ref();
+        let key_msg: &HashPosMsg = request.get_ref();
 
         let successor_finger_entry: FingerEntry = match self.is_successor_of_key(key_msg.into()) {
             true => self.address.clone().into(),
@@ -86,32 +86,32 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
 
-    async fn find_predecessor(&self, request: Request<KeyMsg>) -> Result<Response<AddressMsg>, Status> {
-        let look_up_key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
+    async fn find_predecessor(&self, request: Request<HashPosMsg>) -> Result<Response<AddressMsg>, Status> {
+        let look_up_key = HashPos::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
 
         // current
         let mut current_address: Address = self.address.clone();
-        let mut current_key: Key = hash(&current_address.as_bytes());
+        let mut current_key: HashPos = hash(&current_address.as_bytes());
 
         // successor
         let mut current_successor_address: Address = {
             let finger_table_guard = self.finger_table.lock().unwrap();
             finger_table_guard.fingers[0].get_address().clone()
         };
-        let mut current_successor_key: Key = hash(&current_successor_address.as_bytes());
+        let mut current_successor_key: HashPos = hash(&current_successor_address.as_bytes());
 
 
         while (!is_between(look_up_key, current_key, current_successor_key, true, false)) && current_key != current_successor_key {
             let mut current_client = ChordClient::connect(format!("http://{}", &current_successor_address))
                 .await
                 .unwrap();
-            let response = current_client.find_closest_preceding_finger(Request::new(KeyMsg {
+            let response = current_client.find_closest_preceding_finger(Request::new(HashPosMsg {
                 key: look_up_key.to_be_bytes().to_vec(),
             })).await.unwrap();
 
             // update current
             current_address = response.get_ref().address.clone();
-            current_key = Key::from_be_bytes(response.get_ref().id.clone().try_into().unwrap());
+            current_key = HashPos::from_be_bytes(response.get_ref().id.clone().try_into().unwrap());
 
             current_client = ChordClient::connect(format!("http://{}", current_address))
                 .await
@@ -142,7 +142,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
 
-        let lower: Key = {
+        let lower: HashPos = {
             let mut predecessor = self.predecessor.lock().unwrap();
             let lower = predecessor.key;
             *predecessor = new_predecessor;
@@ -160,9 +160,9 @@ impl chord_proto::chord_server::Chord for ChordService {
                 let mut pair_count = 0;
                 for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
                     transferred_keys.push(key.clone());
-                    debug!("Handing over KV pair ({}, {})", key, value);
+                    // debug!("Handing over KV pair ({}, {})", key, value);
                     if let Err(err) = tx.send(Ok(KvPairMsg {
-                        key: key.to_be_bytes().to_vec(),
+                        key: key.to_vec(),
                         value: value.clone(),
                     })) {
                         error!("ERROR: failed to update stream client: {:?}", err);
@@ -191,7 +191,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn update_finger_table_entry(&self, request: Request<UpdateFingerTableEntryRequest>) -> Result<Response<Empty>, Status> {
         let index_to_update = request.get_ref().index as usize;
         let finger_entry_update: &FingerEntry = &(request.get_ref().clone().finger_entry.unwrap().into());
-        let finger_entry_update_key: Key = finger_entry_update.into();
+        let finger_entry_update_key: HashPos = finger_entry_update.into();
 
         let predecessor_address_str = {
             let predecessor_guard = self.predecessor.lock().unwrap();
@@ -204,7 +204,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
 
         let upper_key = hash(&upper_finger.get_address().as_bytes());
-        let lower_key = self.pos.overflowing_add(Key::two().overflowing_pow(index_to_update as u32).0).0 as Key;
+        let lower_key = self.pos.overflowing_add(HashPos::two().overflowing_pow(index_to_update as u32).0).0 as HashPos;
         // let lower_key = self.pos;
         if is_between(finger_entry_update_key, lower_key, upper_key, false, true) {
             info!("Updating finger table entry {} with {:?}", index_to_update, finger_entry_update);
@@ -225,8 +225,8 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
-    async fn find_closest_preceding_finger(&self, request: Request<KeyMsg>) -> Result<Response<FingerEntryMsg>, Status> {
-        let key = Key::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
+    async fn find_closest_preceding_finger(&self, request: Request<HashPosMsg>) -> Result<Response<FingerEntryMsg>, Status> {
+        let key = HashPos::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
             let node_pos = hash(finger.get_address().as_bytes());
             if is_between(node_pos, self.pos, key, true, true) {
@@ -249,7 +249,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         Ok(Response::new(NodeSummaryMsg {
             url: self.address.clone(),
-            id: self.pos.to_be_bytes().iter()
+            pos: self.pos.to_be_bytes().iter()
                 .map(|byte| byte.to_string())
                 .collect::<Vec<String>>().join(" "),
             predecessor: Some(predecessor.into()),
@@ -268,9 +268,9 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
         let kv_pairs = {
-            self.kv_store_arc.lock().unwrap().iter(Key::one() + 1, Key::one(), false, false)
+            self.kv_store_arc.lock().unwrap().iter(HashPos::one() + 1, HashPos::one(), false, false)
                 .map(|(key, value)| KvPairDebugMsg {
-                    key: key.to_be_bytes().map(|b| b.to_string()).join(" "),
+                    key: key.map(|b| b.to_string()).join(" "),
                     value: value.clone(),
                 }).collect()
         };
@@ -280,16 +280,16 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
 
-    async fn get(&self, request: Request<KeyMsg>) -> Result<Response<GetResponse>, Status> {
-        let key = Key::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
+    async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
+        let key: Key = request.get_ref().clone().key.try_into().unwrap();
         let predecessor_address = {
             self.predecessor.lock().unwrap().get_address().clone()
         };
         let predecessor_key = hash(predecessor_address.as_bytes());
-        if is_between(key, predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
+        if is_between(hash(&key), predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
             match self.kv_store_arc.lock().unwrap().get(&key) {
                 Some(value) => {
-                    info!("Get request for key {}, value = {}", key, value);
+                    // info!("Get request for key {}, value = {}", key, value);
                     Ok(Response::new(GetResponse {
                         value: value.clone(),
                         status: GetStatus::Ok.into(),
@@ -303,7 +303,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 }
             }
         } else {
-            error!("Invalid key {}!", key);
+            // error!("Invalid key {}!", key);
             error!("This node is responsible for interval ({}, {}] !", predecessor_key, self.pos);
             let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
             Err(Status::internal(msg))
@@ -311,7 +311,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
-        let key = Key::from_be_bytes(request.get_ref().key.clone().unwrap().key.try_into().unwrap());
+        let key = request.get_ref().key.clone().try_into().unwrap();
         let ttl = request.get_ref().ttl;
         let replication = request.get_ref().replication;
         let value = &request.get_ref().value;
@@ -319,7 +319,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         // todo: handle ttl
         // todo: handle replication
         let is_update = self.kv_store_arc.lock().unwrap().put(&key, value);
-        info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
+        // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
 }
