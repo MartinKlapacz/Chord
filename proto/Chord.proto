@@ -2,8 +2,12 @@ syntax = "proto3";
 
 package chord;
 
+// helper
+
 message Empty {
 }
+
+// chord protocol
 
 message AddressMsg {
   string address = 1;
@@ -22,6 +26,31 @@ message FingerEntryMsg {
   string address = 2;
 }
 
+message UpdateFingerTableEntryRequest {
+  uint32 index = 1;
+  FingerEntryMsg fingerEntry = 2;
+}
+
+message GetKvStoreSizeResponse {
+  uint32 size = 1;
+}
+
+message KvPairMsg {
+  bytes key = 1;
+  string value = 2;
+}
+
+message GetKvStoreDataResponse {
+  repeated KvPairDebugMsg kvPairs = 1;
+}
+
+// debugging
+
+message KvPairDebugMsg {
+  string key = 1;
+  string value = 2;
+}
+
 message FingerEntryDebugMsg {
   string id = 1;
   string address = 2;
@@ -34,15 +63,7 @@ message NodeSummaryMsg {
   repeated FingerEntryDebugMsg fingerEntries = 4;
 }
 
-message UpdateFingerTableEntryRequest {
-  uint32 index = 1;
-  FingerEntryMsg fingerEntry = 2;
-}
-
-enum GetStatus {
-  OK = 0;
-  NOT_FOUND = 1;
-}
+// hashtable RPCs
 
 message GetRequest {
   bytes key = 1;
@@ -53,6 +74,11 @@ message GetResponse {
   GetStatus status = 2;
 }
 
+enum GetStatus {
+  OK = 0;
+  NOT_FOUND = 1;
+}
+
 message PutRequest {
   bytes key = 1;
   uint64 ttl = 2;
@@ -60,24 +86,6 @@ message PutRequest {
   string value = 4;
 }
 
-message GetKvStoreSizeResponse {
-  uint32 size = 1;
-}
-
-
-message KvPairMsg {
-  bytes key = 1;
-  string value = 2;
-}
-
-message KvPairDebugMsg {
-  string key = 1;
-  string value = 2;
-}
-
-message GetKvStoreDataResponse {
-  repeated KvPairDebugMsg kvPairs = 1;
-}
 
 service Chord {
   // chord protocol
@@ -94,7 +102,7 @@ service Chord {
   rpc GetKvStoreSize (Empty) returns (GetKvStoreSizeResponse);
   rpc GetKvStoreData (Empty) returns (GetKvStoreDataResponse);
 
-  // Hashtable calls
+  // Hashtable RPCS
   rpc Get(GetRequest) returns (GetResponse);
   rpc Put(PutRequest) returns (Empty);
 }
