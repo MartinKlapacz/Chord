@@ -90,6 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up periodic fix_fingers call");
     thread_handles.push(tokio::spawn(async move {
+        sleep(Duration::from_millis(3000)).await;
         let mut local_grpc_service_client = ChordClient::connect(format!("http://{}", cloned_grpc_addr_4))
             .await
             .unwrap();
@@ -102,7 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     for handle in thread_handles {
-        let _ = handle.await?;
+        handle.await?;
     }
 
     Ok(())
