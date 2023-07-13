@@ -6,7 +6,7 @@ use crate::threads::chord::chord_proto::{FingerEntryDebugMsg, FingerEntryMsg, Fi
 use crate::utils::crypto::HashPos;
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct FingerEntry {
     pub(crate) key: HashPos,
     pub(crate) address: Address,

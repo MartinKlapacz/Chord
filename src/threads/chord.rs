@@ -322,4 +322,26 @@ impl chord_proto::chord_server::Chord for ChordService {
         // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
+
+    async fn fix_fingers(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+        println!("received fix fingers!");
+        let mut lookup_positions: Vec<HashPos> = Vec::new();
+        for i in 0..HashPos::finger_count() {
+            lookup_positions.push(self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0)
+        }
+
+        for (i, lookup_position) in lookup_positions.iter().enumerate() {
+            let successor_address_for_lookup_pos = self.find_successor(Request::new(HashPosMsg {
+                key: lookup_position.to_be_bytes().to_vec(),
+            })).await.unwrap().into_inner();
+
+            self.finger_table.lock().unwrap().fingers[i] = FingerEntry {
+                key: hash(successor_address_for_lookup_pos.address.as_bytes()),
+                address: successor_address_for_lookup_pos.address,
+            };
+        }
+
+        Ok(Response::new(Empty{}))
+
+    }
 }

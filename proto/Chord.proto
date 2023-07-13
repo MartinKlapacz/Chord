@@ -105,4 +105,7 @@ service Chord {
   // Hashtable RPCS
   rpc Get(GetRequest) returns (GetResponse);
   rpc Put(PutRequest) returns (Empty);
+
+  // stabilization
+  rpc FixFingers(Empty) returns (Empty);
 }
