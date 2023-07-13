@@ -3,7 +3,7 @@ use std::process::exit;
 use std::time::Duration;
 
 use clap::Parser;
-use log::{info, LevelFilter};
+use log::{debug, info, LevelFilter, warn};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
@@ -90,15 +90,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up periodic fix_fingers call");
     thread_handles.push(tokio::spawn(async move {
-        sleep(Duration::from_millis(3000)).await;
-        let mut local_grpc_service_client = ChordClient::connect(format!("http://{}", cloned_grpc_addr_4))
-            .await
-            .unwrap();
+        let retry_connection_sleep_millis = 50;
+        let retry_fix_fingers_sleep_millis = 1000;
         loop {
-            local_grpc_service_client.fix_fingers(Request::new(Empty {}))
-                .await
-                .unwrap();
-            sleep(Duration::from_millis(1000)).await;
+            match ChordClient::connect(format!("http://{}", cloned_grpc_addr_4.clone())).await {
+                Ok(mut client) => {
+                    loop {
+                        client.fix_fingers(Request::new(Empty {}))
+                            .await
+                            .unwrap();
+                        sleep(Duration::from_millis(retry_connection_sleep_millis)).await;
+                    }
+                },
+                Err(e) => {
+                    debug!("Failed connecting to local grpc service, retrying in {} millis", retry_fix_fingers_sleep_millis);
+                    sleep(Duration::from_millis(retry_fix_fingers_sleep_millis)).await
+                }
+            }
+
         }
     }));
 
