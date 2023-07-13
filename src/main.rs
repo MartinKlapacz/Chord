@@ -1,15 +1,16 @@
 use std::error::Error;
 use std::process::exit;
+use std::time::Duration;
 
 use clap::Parser;
 use log::{info, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
-use tokio::signal;
 
 use crate::threads::chord::{ChordService, Address};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
+use crate::threads::fix_fingers::fix_fingers;
 use crate::utils::cli::Cli;
 use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
@@ -38,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_1 = args.grpc_address.clone();
     let cloned_grpc_addr_2 = args.grpc_address.clone();
     let cloned_grpc_addr_3 = args.grpc_address.clone();
+    let cloned_grpc_addr_4 = args.grpc_address.clone();
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
@@ -83,8 +85,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         exit(0)
     }));
 
+    info!("Starting up periodic fix_fingers call");
+    thread_handles.push(tokio::spawn(async move {
+        fix_fingers(cloned_grpc_addr_4).await
+    }));
+
     for handle in thread_handles {
-        let _ = handle.await?;
+        handle.await?;
     }
 
     Ok(())
