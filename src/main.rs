@@ -10,10 +10,11 @@ use tonic::transport::Server;
 
 use crate::threads::chord::{ChordService, Address};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
-use crate::threads::fix_fingers::fix_fingers;
+use crate::threads::fix_fingers::periodic_fix_fingers;
 use crate::utils::cli::Cli;
 use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
+use crate::threads::stabilize::periodic_stabilize;
 use crate::threads::tcp_service::handle_client_connection;
 
 mod node;
@@ -40,6 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_2 = args.grpc_address.clone();
     let cloned_grpc_addr_3 = args.grpc_address.clone();
     let cloned_grpc_addr_4 = args.grpc_address.clone();
+    let cloned_grpc_addr_5 = args.grpc_address.clone();
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
@@ -87,7 +89,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up periodic fix_fingers call");
     thread_handles.push(tokio::spawn(async move {
-        fix_fingers(cloned_grpc_addr_4).await
+        periodic_fix_fingers(cloned_grpc_addr_4).await
+    }));
+
+    thread_handles.push(tokio::spawn(async move {
+        periodic_stabilize(cloned_grpc_addr_5).await
     }));
 
     for handle in thread_handles {
