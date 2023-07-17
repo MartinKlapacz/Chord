@@ -20,8 +20,9 @@ use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashRingKey, HashPos};
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String,
-                               tx1: Sender<(Arc<Mutex<FingerTable>>, FingerEntry, Arc<Mutex<dyn KVStore + Send>>)>,
-                               tx2: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<dyn KVStore + Send>>)>) -> Result<(), Box<dyn Error>> {
+                               tx1: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<FingerEntry>>, Arc<Mutex<dyn KVStore + Send>>)>,
+                               tx2: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<dyn KVStore + Send>>)>,
+                               tx3: Sender<Arc<Mutex<FingerEntry>>>) -> Result<(), Box<dyn Error>> {
     let own_id = hash(own_grpc_address_str.as_bytes());
 
     let mut finger_table = FingerTable::new(&own_id, own_grpc_address_str);
@@ -79,8 +80,10 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             let finger_table_len = finger_table.fingers.len();
             // finger table is constructed, send it to grpc thread and shotdown thread
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
-            tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
+            let predecessor_arc = Arc::new(Mutex::new(predecessor.into()));
+            tx1.send((finger_table_arc.clone(), predecessor_arc.clone(), kv_store_arc.clone())).unwrap();
             tx2.send((finger_table_arc, kv_store_arc)).unwrap();
+            tx3.send(predecessor_arc);
 
             info!("Updating other nodes...");
             for index in 0..finger_table_len {
@@ -108,8 +111,10 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
             finger_table.set_all_fingers(&own_grpc_address_str);
             let finger_table_arc = Arc::new(Mutex::new(finger_table));
 
-            tx1.send((finger_table_arc.clone(), predecessor.into(), kv_store_arc.clone())).unwrap();
+            let predecessor_arc = Arc::new(Mutex::new(predecessor.into()));
+            tx1.send((finger_table_arc.clone(), predecessor_arc.clone(), kv_store_arc.clone())).unwrap();
             tx2.send((finger_table_arc, kv_store_arc)).unwrap();
+            tx3.send(predecessor_arc);
         }
     };
 

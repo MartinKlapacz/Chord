@@ -5,7 +5,7 @@ use tonic::Request;
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;
 
-const RETRY_CONNECTION_SLEEP_MILLIS: u64 = 50;
+const RETRY_CONNECTION_SLEEP_MILLIS: u64 = 10_1000;
 const RETRY_FIX_FINGERS_SLEEP_MILLIS: u64 = 1000;
 
 pub async fn fix_fingers(local_grpc_service_address: String) -> ! {

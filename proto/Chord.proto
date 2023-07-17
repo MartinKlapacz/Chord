@@ -86,6 +86,13 @@ message PutRequest {
   string value = 4;
 }
 
+message PuzzleMsg {
+
+}
+
+message ProofOfWorkSolutionMsg {
+  uint64 nonce = 1;
+}
 
 service Chord {
   // chord protocol
@@ -108,4 +115,7 @@ service Chord {
 
   // stabilization
   rpc FixFingers(Empty) returns (Empty);
+
+  // security measures
+  rpc requestProofOfWork(PuzzleMsg) returns (ProofOfWorkSolutionMsg);
 }

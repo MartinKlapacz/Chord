@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::pin::Pin;
 use std::process::exit;
 use std::time::Duration;
 
@@ -6,15 +7,19 @@ use clap::Parser;
 use log::{info, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tonic::transport::Server;
+use tokio_cron_scheduler::{JobScheduler, JobToRun, Job};
+use tonic::transport::{Channel, Server};
 
 use crate::threads::chord::{ChordService, Address};
+use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::fix_fingers::fix_fingers;
-use crate::utils::cli::Cli;
 use crate::threads::join::process_node_join;
+use crate::threads::resource_identity_validation::validate_predecessor_resources;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::tcp_service::handle_client_connection;
+
+use crate::utils::cli::Cli;
 
 mod node;
 mod utils;
@@ -43,17 +48,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
+    let (tx3, rx_pow) = oneshot::channel();
 
-    info!("Starting up setup thread");
     thread_handles.push(tokio::spawn(async move {
-        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2)
+        info!("Starting up setup thread");
+        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3)
             .await
             .unwrap();
     }));
 
-
-    info!("Starting up tcp main thread on {}", tcp_addr);
     thread_handles.push(tokio::spawn(async move {
+        info!("Starting up tcp main thread on {}", tcp_addr);
         let listener = TcpListener::bind(tcp_addr).await.unwrap();
         loop {
             let grpc_address = cloned_grpc_addr_3.clone();
@@ -85,15 +90,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         exit(0)
     }));
 
-    info!("Starting up periodic fix_fingers call");
     thread_handles.push(tokio::spawn(async move {
+        info!("Starting up periodic fix_fingers call");
         fix_fingers(cloned_grpc_addr_4).await
+    }));
+
+    thread_handles.push(tokio::spawn(async move {
+        let mut scheduler = JobScheduler::new()
+            .await
+            .unwrap();
+
+        let predecessor_arc = rx_pow.await.unwrap();
+        let predecessor_address = predecessor_arc.lock().unwrap().address.clone();
+
+
+
+        scheduler.add(Job::new_async("1/5 * * * * *", |uuid, mut l| Box::pin(async move {
+            let mut client: ChordClient<Channel> = ChordClient::connect(predecessor_address)
+                .await
+                .unwrap();
+            validate_predecessor_resources(client).await;
+        })).unwrap()).await.expect("TODO: panic message");
+        scheduler.start().await;
     }));
 
     for handle in thread_handles {
         handle.await?;
     }
-
     Ok(())
 }
 

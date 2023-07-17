@@ -12,7 +12,7 @@ use tonic::{Request, Response, Status};
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, ProofOfWorkSolutionMsg, PutRequest, PuzzleMsg, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashRingKey, is_between, HashPos, Key};
 
@@ -32,13 +32,13 @@ pub struct ChordService {
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, FingerEntry, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
-        let (finger_table, predecessor, kv_store) = rx.await.unwrap();
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<FingerEntry>>, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
+        let (finger_table, predecessor_arc, kv_store) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
             pos: hash(&url.as_bytes()),
             finger_table,
-            predecessor: Arc::new(Mutex::new(predecessor)),
+            predecessor: predecessor_arc,
             kv_store_arc: kv_store,
         }
     }
@@ -343,5 +343,9 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         Ok(Response::new(Empty{}))
 
+    }
+
+    async fn request_proof_of_work(&self, request: Request<PuzzleMsg>) -> Result<Response<ProofOfWorkSolutionMsg>, Status> {
+        todo!()
     }
 }
