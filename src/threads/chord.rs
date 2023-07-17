@@ -1,13 +1,13 @@
-use std::error::Error;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
-use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
+use tokio_stream::Stream;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status};
+use tonic::transport::Channel;
 
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
@@ -343,5 +343,46 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         Ok(Response::new(Empty{}))
 
+    }
+
+    async fn stabilize(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+        let successor_address = {
+            self.finger_table.lock().unwrap().fingers[0].address.clone()
+        };
+
+        let mut successor_client: ChordClient<Channel> = ChordClient::connect(successor_address.clone())
+            .await
+            .unwrap();
+
+        let current_successors_predecessor_address: Address = successor_client.get_predecessor(Request::new(Empty{}))
+            .await
+            .unwrap().into_inner().into();
+        let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
+        let successor_pos = hash(successor_address.as_bytes());
+
+        if is_between(current_successors_predecessor_pos, self.pos, successor_pos, true, true) {
+            self.finger_table.lock().unwrap().fingers[0].address = current_successors_predecessor_address;
+        }
+
+        successor_client.notify(Request::new(self.address.clone().into()))
+            .await
+            .unwrap();
+
+        Ok(Response::new(Empty{}))
+    }
+
+    async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Empty>, Status> {
+        let caller_address: Address = request.into_inner().into();
+        let caller_pos = hash(caller_address.as_bytes());
+        let predecessor_pos = {
+            hash(self.predecessor.lock().unwrap().address.as_bytes())
+        };
+
+        if is_between(caller_pos, predecessor_pos, self.pos, true, true) {
+            let mut predecessor_guard = self.predecessor.lock().unwrap();
+            predecessor_guard.key = caller_pos;
+            predecessor_guard.address = caller_address;
+        }
+        Ok(Response::new(Empty {}))
     }
 }
