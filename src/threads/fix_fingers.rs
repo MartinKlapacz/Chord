@@ -8,7 +8,7 @@ use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS, FIX_FINGERS_
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;
 
-pub async fn periodic_fix_fingers(local_grpc_service_address: String) -> ! {
+pub async fn fix_fingers_periodically(local_grpc_service_address: String) -> ! {
     loop {
         match ChordClient::connect(format!("http://{}", local_grpc_service_address.clone())).await {
             Ok(mut client) => {

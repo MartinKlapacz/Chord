@@ -8,7 +8,7 @@ use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;
 use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS, STABILIZE_SLEEP_MILLIS};
 
-pub async fn periodic_stabilize(local_grpc_service_address: String) -> ! {
+pub async fn stabilize_periodically(local_grpc_service_address: String) -> ! {
     loop {
         match ChordClient::connect(format!("http://{}", local_grpc_service_address.clone())).await {
             Ok(mut client) => {

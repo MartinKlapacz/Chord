@@ -8,14 +8,14 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
 
-use crate::threads::chord::{ChordService, Address};
+use crate::threads::chord::{Address, ChordService};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
-use crate::threads::fix_fingers::periodic_fix_fingers;
-use crate::utils::cli::Cli;
+use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
-use crate::threads::stabilize::periodic_stabilize;
+use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::tcp_service::handle_client_connection;
+use crate::utils::cli::Cli;
 
 mod node;
 mod utils;
@@ -89,11 +89,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting up periodic fix_fingers call");
     thread_handles.push(tokio::spawn(async move {
-        periodic_fix_fingers(cloned_grpc_addr_4).await
+        fix_fingers_periodically(cloned_grpc_addr_4).await
     }));
 
     thread_handles.push(tokio::spawn(async move {
-        periodic_stabilize(cloned_grpc_addr_5).await
+        stabilize_periodically(cloned_grpc_addr_5).await
     }));
 
     for handle in thread_handles {
