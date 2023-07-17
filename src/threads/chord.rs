@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
@@ -43,6 +44,10 @@ impl ChordService {
         }
     }
 
+    pub fn is_single_node_cluster(&self, ) -> bool {
+        self.predecessor.lock().unwrap().address.eq(&self.address)
+    }
+
     pub fn is_successor_of_key(&self, key: HashPos) -> bool {
         let predecessor_position = self.predecessor.lock().unwrap().get_key().clone();
         let own_position = self.pos.clone();
@@ -81,7 +86,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 successor_of_key_predecessor_response.get_ref().address.clone().into()
             }
         };
-        info!("Received find_successor call for {:?}, successor is {:?}", key_msg, successor_finger_entry);
+        debug!("Received find_successor call for {:?}, successor is {:?}", key_msg, successor_finger_entry);
         Ok(Response::new(successor_finger_entry.into()))
     }
 
@@ -324,7 +329,11 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn fix_fingers(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
-        println!("received fix fingers!");
+        if self.is_single_node_cluster() {
+            return Ok(Response::new(Empty {}))
+        }
+
+        info!("Fixing fingers...");
         let mut lookup_positions: Vec<HashPos> = Vec::new();
         for i in 0..HashPos::finger_count() {
             lookup_positions.push(self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0)
@@ -345,12 +354,17 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     }
 
-    async fn stabilize(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+    async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
+        if self.is_single_node_cluster() {
+            return Ok(Response::new(Empty {}))
+        }
+
+        info!("Stabilizing...");
         let successor_address = {
             self.finger_table.lock().unwrap().fingers[0].address.clone()
         };
 
-        let mut successor_client: ChordClient<Channel> = ChordClient::connect(successor_address.clone())
+        let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", successor_address).clone())
             .await
             .unwrap();
 
@@ -362,6 +376,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         if is_between(current_successors_predecessor_pos, self.pos, successor_pos, true, true) {
             self.finger_table.lock().unwrap().fingers[0].address = current_successors_predecessor_address;
+            debug!("Updated successor due to stabilization-call");
         }
 
         successor_client.notify(Request::new(self.address.clone().into()))
@@ -382,6 +397,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             let mut predecessor_guard = self.predecessor.lock().unwrap();
             predecessor_guard.key = caller_pos;
             predecessor_guard.address = caller_address;
+            debug!("Updated predecessor due to notify-call");
         }
         Ok(Response::new(Empty {}))
     }
