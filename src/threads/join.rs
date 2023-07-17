@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-use std::convert::TryInto;
 use std::error::Error;
-use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, info};
@@ -11,7 +8,7 @@ use tonic::Request;
 use chord::utils::crypto::Key;
 
 use crate::kv::hash_map_store::HashMapStore;
-use crate::kv::kv_store::{KVStore, Value};
+use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::Address;

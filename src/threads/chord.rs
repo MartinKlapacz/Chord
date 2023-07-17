@@ -1,4 +1,3 @@
-use std::fmt::format;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
@@ -13,7 +12,7 @@ use tonic::transport::Channel;
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, FingerTableMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashRingKey, is_between, HashPos, Key};
 
@@ -328,7 +327,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
-    async fn fix_fingers(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+    async fn fix_fingers(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         if self.is_single_node_cluster() {
             return Ok(Response::new(Empty {}))
         }

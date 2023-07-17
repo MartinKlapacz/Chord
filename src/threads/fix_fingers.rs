@@ -19,7 +19,7 @@ pub async fn fix_fingers_periodically(local_grpc_service_address: String) -> ! {
                     sleep(Duration::from_millis(FIX_FINGERS_SLEEP_MILLIS)).await;
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 debug!("Failed connecting to local grpc service, retrying in {} millis", CONNECTION_RETRY_UPON_FAILURE_MILLIS);
                 sleep(Duration::from_millis(CONNECTION_RETRY_UPON_FAILURE_MILLIS)).await
             }

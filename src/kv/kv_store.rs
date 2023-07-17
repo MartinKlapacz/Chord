@@ -1,8 +1,4 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::iter::Take;
-use std::path::Iter;
-use crate::threads::chord::chord_proto::HashPosMsg;
 
 use crate::utils::crypto::{HashPos, Key};
 

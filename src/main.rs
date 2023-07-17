@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::process::exit;
-use std::time::Duration;
 
 use clap::Parser;
 use log::{info, LevelFilter};
@@ -8,7 +7,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
 
-use crate::threads::chord::{Address, ChordService};
+use crate::threads::chord::{ChordService};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::join::process_node_join;

@@ -1,8 +1,7 @@
-use std::fmt::{Debug, Pointer};
+use std::fmt::Debug;
 use std::fmt;
 
 use crate::threads::chord::Address;
-use crate::threads::chord::chord_proto::{FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, HashPosMsg};
 use crate::utils::crypto::HashPos;
 
 

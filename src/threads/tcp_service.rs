@@ -26,11 +26,11 @@ pub async fn handle_client_connection(mut socket: TcpStream, grpc_address: &Stri
             _ => panic!("Unexpected Error")
         };
         let code = socket.read_u16().await.unwrap();
-        let res = match code {
+        match code {
             code if code == DHT_PUT => handle_put(&grpc_address, &mut socket, size).await,
             code if code == DHT_GET => handle_get(&grpc_address, &mut socket).await,
             _ => panic!("invalid code {}", code)
-        };
+        }.unwrap();
     }
     Ok(())
 }
