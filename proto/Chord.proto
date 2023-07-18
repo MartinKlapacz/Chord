@@ -110,4 +110,7 @@ service Chord {
   rpc FixFingers(Empty) returns (Empty);
   rpc Stabilize(Empty) returns (Empty);
   rpc Notify(AddressMsg) returns (Empty);
+
+  // security
+  rpc Health(Empty) returns (Empty);
 }

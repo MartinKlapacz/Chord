@@ -134,7 +134,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
         let finger_entry = self.predecessor.lock().unwrap();
-        info!("Received get predecessor call, predecessor is {:?}", finger_entry);
+        debug!("Received get predecessor call, predecessor is {:?}", finger_entry);
         Ok(Response::new(finger_entry.clone().into()))
     }
 
@@ -398,6 +398,10 @@ impl chord_proto::chord_server::Chord for ChordService {
             predecessor_guard.address = caller_address;
             debug!("Updated predecessor due to notify-call");
         }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
 }

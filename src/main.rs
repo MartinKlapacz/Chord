@@ -10,6 +10,7 @@ use tonic::transport::Server;
 use crate::threads::chord::{ChordService};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::fix_fingers::fix_fingers_periodically;
+use crate::threads::health::check_predecessor_health_periodically;
 use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
@@ -41,6 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_3 = args.grpc_address.clone();
     let cloned_grpc_addr_4 = args.grpc_address.clone();
     let cloned_grpc_addr_5 = args.grpc_address.clone();
+    let cloned_grpc_addr_6 = args.grpc_address.clone();
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
@@ -93,6 +95,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     thread_handles.push(tokio::spawn(async move {
         stabilize_periodically(cloned_grpc_addr_5).await
+    }));
+
+    thread_handles.push(tokio::spawn(async move {
+        check_predecessor_health_periodically(cloned_grpc_addr_6).await
     }));
 
     for handle in thread_handles {

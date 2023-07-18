@@ -3,10 +3,11 @@ use std::time::Duration;
 use log::debug;
 use tokio::time::sleep;
 use tonic::Request;
+use crate::threads::chord::Address;
 
-use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS, FIX_FINGERS_SLEEP_MILLIS};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;
+use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS, FIX_FINGERS_SLEEP_MILLIS};
 
 pub async fn fix_fingers_periodically(local_grpc_service_address: String) -> ! {
     loop {
