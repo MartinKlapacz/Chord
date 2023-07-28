@@ -13,6 +13,7 @@ pub async fn fix_fingers_periodically(local_grpc_service_address: String) -> ! {
     loop {
         match ChordClient::connect(format!("http://{}", local_grpc_service_address.clone())).await {
             Ok(mut client) => {
+                debug!("Successfully connected to local grpc service");
                 loop {
                     client.fix_fingers(Request::new(Empty {}))
                         .await

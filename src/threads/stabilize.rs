@@ -12,6 +12,7 @@ pub async fn stabilize_periodically(local_grpc_service_address: String) -> ! {
     loop {
         match ChordClient::connect(format!("http://{}", local_grpc_service_address.clone())).await {
             Ok(mut client) => {
+                debug!("Successfully connected to local grpc service");
                 loop {
                     client.stabilize(Request::new(Empty {}))
                         .await

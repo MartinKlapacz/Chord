@@ -32,6 +32,10 @@ impl FingerTable {
             finger.address = address.clone();
         }
     }
+
+    pub fn get_successor_address(&self) -> Address {
+        self.fingers[0].address.clone()
+    }
 }
 
 impl Into<FingerTableMsg> for FingerTable {
