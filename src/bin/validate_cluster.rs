@@ -115,7 +115,11 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
     for i in 1..node_count {
         let grpc_node_port = 5601u16 + i as u16;
         let tcp_node_port = grpc_node_port - 100;
-        let child_handle = get_base_node_start_up_command(tcp_node_port, grpc_node_port, Some(join_peer_address.as_str()));
+        let child_handle = get_base_node_start_up_command(
+            tcp_node_port,
+            grpc_node_port,
+            Some(format!("127.0.0.1:{}", 5601u16 + i as u16 - 1).as_str())
+        );
         child_handles.push(child_handle);
         ports.push(grpc_node_port);
 
