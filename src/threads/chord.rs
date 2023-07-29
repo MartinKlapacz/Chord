@@ -332,23 +332,16 @@ impl chord_proto::chord_server::Chord for ChordService {
             return Ok(Response::new(Empty {}))
         }
 
-        info!("Fixing fingers...");
-        let mut lookup_positions: Vec<HashPos> = Vec::new();
+        debug!("Fixing fingers...");
         for i in 0..HashPos::finger_count() {
-            lookup_positions.push(self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0)
-        }
+            let lookup_position = self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0;
 
-        for (i, lookup_position) in lookup_positions.iter().enumerate() {
-            let successor_address_for_lookup_pos = self.find_successor(Request::new(HashPosMsg {
+            let responsible_node_for_lookup_pos = self.find_successor(Request::new(HashPosMsg {
                 key: lookup_position.to_be_bytes().to_vec(),
             })).await.unwrap().into_inner();
 
-            self.finger_table.lock().unwrap().fingers[i] = FingerEntry {
-                key: hash(successor_address_for_lookup_pos.address.as_bytes()),
-                address: successor_address_for_lookup_pos.address,
-            };
+            self.finger_table.lock().unwrap().fingers[i].address = responsible_node_for_lookup_pos.address;
         }
-
         Ok(Response::new(Empty{}))
 
     }
