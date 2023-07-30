@@ -46,10 +46,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
+    let (tx3, rx_check_predecessor) = oneshot::channel();
 
     info!("Starting up setup thread");
     thread_handles.push(tokio::spawn(async move {
-        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2)
+        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3)
             .await
             .unwrap();
     }));
@@ -83,22 +84,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .unwrap();
     }));
 
-    thread_handles.push(tokio::spawn(async move {
-        shutdown_handoff(rx_shutdown_handoff).await.unwrap();
-        exit(0)
-    }));
+    // thread_handles.push(tokio::spawn(async move {
+    //     shutdown_handoff(rx_shutdown_handoff).await.unwrap();
+    //     exit(0)
+    // }));
 
-    info!("Starting up periodic fix_fingers call");
-    thread_handles.push(tokio::spawn(async move {
-        fix_fingers_periodically(cloned_grpc_addr_4).await
-    }));
+    // info!("Starting up periodic fix_fingers call");
+    // thread_handles.push(tokio::spawn(async move {
+    //     fix_fingers_periodically(cloned_grpc_addr_4).await
+    // }));
+    //
+    // thread_handles.push(tokio::spawn(async move {
+    //     stabilize_periodically(cloned_grpc_addr_5).await
+    // }));
 
     thread_handles.push(tokio::spawn(async move {
-        stabilize_periodically(cloned_grpc_addr_5).await
-    }));
-
-    thread_handles.push(tokio::spawn(async move {
-        check_predecessor_health_periodically(cloned_grpc_addr_6).await
+        check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor).await
     }));
 
     for handle in thread_handles {

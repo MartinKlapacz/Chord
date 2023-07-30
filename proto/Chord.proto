@@ -86,15 +86,16 @@ message PutRequest {
   string value = 4;
 }
 
+message GetPredecessorResponse {
+   optional AddressMsg address_optional = 1;
+}
 
 service Chord {
   // chord protocol
   rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
   rpc FindPredecessor (HashPosMsg) returns (AddressMsg);
-  rpc GetPredecessor (Empty) returns (AddressMsg);
-  rpc SetPredecessor (AddressMsg) returns (stream KvPairMsg);
+  rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
   rpc GetDirectSuccessor (Empty) returns (AddressMsg);
-  rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
   rpc FindClosestPrecedingFinger (HashPosMsg) returns (FingerEntryMsg);
 
   // debugging
@@ -109,7 +110,7 @@ service Chord {
   // stabilization
   rpc FixFingers(Empty) returns (Empty);
   rpc Stabilize(Empty) returns (Empty);
-  rpc Notify(AddressMsg) returns (Empty);
+  rpc Notify(AddressMsg) returns (stream KvPairMsg);
 
   // security
   rpc Health(Empty) returns (Empty);

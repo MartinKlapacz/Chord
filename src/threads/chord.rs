@@ -1,7 +1,7 @@
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, info};
+use log::{debug, info};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio_stream::Stream;
@@ -12,9 +12,9 @@ use tonic::transport::Channel;
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, UpdateFingerTableEntryRequest};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{hash, HashRingKey, is_between, HashPos, Key};
+use crate::utils::crypto::{hash, HashPos, HashRingKey, is_between};
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -26,37 +26,38 @@ pub struct ChordService {
     address: String,
     pos: HashPos,
     finger_table: Arc<Mutex<FingerTable>>,
-    predecessor: Arc<Mutex<FingerEntry>>,
-    kv_store_arc: Arc<Mutex<dyn KVStore + Send>>,
+    predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
+    kv_store: Arc<Mutex<dyn KVStore + Send>>,
 }
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, FingerEntry, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
-        let (finger_table, predecessor, kv_store) = rx.await.unwrap();
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
+        let (finger_table_arc, predecessor_option_arc, kv_store_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
             pos: hash(&url.as_bytes()),
-            finger_table,
-            predecessor: Arc::new(Mutex::new(predecessor)),
-            kv_store_arc: kv_store,
+            finger_table: finger_table_arc,
+            predecessor_option: predecessor_option_arc,
+            kv_store: kv_store_arc,
         }
     }
 
-    pub fn is_single_node_cluster(&self, ) -> bool {
-        self.predecessor.lock().unwrap().address.eq(&self.address)
-    }
-
     pub fn is_successor_of_key(&self, key: HashPos) -> bool {
-        let predecessor_position = self.predecessor.lock().unwrap().get_key().clone();
-        let own_position = self.pos.clone();
-
-        if predecessor_position < own_position {
-            return predecessor_position < key && key <= own_position;
-        } else if predecessor_position > own_position {
-            return predecessor_position < key || key <= own_position;
-        } else {
-            return true;
+        match *self.predecessor_option.lock().unwrap() {
+            Some(ref predecessor) => {
+                let predecessor_pos = predecessor.get_key().clone();
+                if predecessor_pos < self.pos {
+                    return predecessor_pos < key && key <= self.pos;
+                } else if predecessor_pos > self.pos {
+                    return predecessor_pos < key || key <= self.pos;
+                } else {
+                    return true;
+                }
+            }
+            None => {
+                false
+            }
         }
     }
 }
@@ -132,59 +133,23 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(current_address.into()))
     }
 
-    async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
-        let finger_entry = self.predecessor.lock().unwrap();
-        debug!("Received get predecessor call, predecessor is {:?}", finger_entry);
-        Ok(Response::new(finger_entry.clone().into()))
-    }
-
-    type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
-
-    async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Self::SetPredecessorStream>, Status> {
-        let new_predecessor: FingerEntry = request.get_ref().into();
-        let upper = new_predecessor.key;
-
-        info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
-
-        let lower: HashPos = {
-            let mut predecessor = self.predecessor.lock().unwrap();
-            let lower = predecessor.key;
-            *predecessor = new_predecessor;
-            lower
+    async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<GetPredecessorResponse>, Status> {
+        let predecessor = match *self.predecessor_option.lock().unwrap() {
+            Some(ref predecessor) => {
+                debug!("Received get predecessor call, predecessor is {:?}", predecessor.address);
+                predecessor.address.clone()
+            }
+            None => {
+                debug!("Received get predecessor call, predecessor is Nil");
+                Address::default()
+            }
         };
-
-        let (tx, rx) = mpsc::unbounded_channel();
-        let kv_store_arc = self.kv_store_arc.clone();
-
-        tokio::spawn(async move {
-            let mut transferred_keys: Vec<Key> = vec![];
-            {
-                info!("Handing over data from {} to {}", lower, upper);
-                let kv_store_guard = kv_store_arc.lock().unwrap();
-                let mut pair_count = 0;
-                for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
-                    transferred_keys.push(key.clone());
-                    debug!("Handing over KV pair ({:?}, {})", key, value);
-                    if let Err(err) = tx.send(Ok(KvPairMsg {
-                        key: key.to_vec(),
-                        value: value.clone(),
-                    })) {
-                        error!("ERROR: failed to update stream client: {:?}", err);
-                    };
-                    pair_count += 1;
-                }
-                info!("Data handoff finished, transferred {} pairs", pair_count)
-            }
-
-            let mut kv_store_guard = kv_store_arc.lock().unwrap();
-            for key in &transferred_keys {
-                kv_store_guard.delete(key);
-            }
-        });
-
-        let stream = UnboundedReceiverStream::new(rx);
-        Ok(Response::new(Box::pin(stream) as Self::SetPredecessorStream))
+        Ok(Response::new(GetPredecessorResponse {
+            address_optional: None,
+        }))
     }
+
+    // type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
 
 
     async fn get_direct_successor(&self, _: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
@@ -192,46 +157,13 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(finger_table_guard.into()))
     }
 
-    async fn update_finger_table_entry(&self, request: Request<UpdateFingerTableEntryRequest>) -> Result<Response<Empty>, Status> {
-        let index_to_update = request.get_ref().index as usize;
-        let finger_entry_update: &FingerEntry = &(request.get_ref().clone().finger_entry.unwrap().into());
-        let finger_entry_update_key: HashPos = finger_entry_update.into();
-
-        let predecessor_address_str = {
-            let predecessor_guard = self.predecessor.lock().unwrap();
-            predecessor_guard.get_address().clone()
-        };
-        let upper_finger = {
-            let finger_table_guard = self.finger_table.lock().unwrap();
-            finger_table_guard.fingers[index_to_update].clone()
-        };
-
-
-        let upper_key = hash(&upper_finger.get_address().as_bytes());
-        let lower_key = self.pos.overflowing_add(HashPos::two().overflowing_pow(index_to_update as u32).0).0 as HashPos;
-        // let lower_key = self.pos;
-        if is_between(finger_entry_update_key, lower_key, upper_key, false, true) {
-            info!("Updating finger table entry {} with {:?}", index_to_update, finger_entry_update);
-            {
-                let mut finger_table_guard = self.finger_table.lock().unwrap();
-                *finger_table_guard.fingers[index_to_update].get_address_mut() = finger_entry_update.get_address().clone();
-            }
-
-            let mut predecessor_to_update_client = ChordClient::connect(format!("http://{}", predecessor_address_str))
-                .await
-                .unwrap();
-            let _ = predecessor_to_update_client.update_finger_table_entry(Request::new(UpdateFingerTableEntryRequest {
-                index: index_to_update as u32,
-                finger_entry: Some(finger_entry_update.into()),
-            })).await.unwrap();
-        }
-
-        Ok(Response::new(Empty {}))
-    }
 
     async fn find_closest_preceding_finger(&self, request: Request<HashPosMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = HashPos::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
+            if finger.address.eq(&Address::default()) {
+                continue;
+            }
             let node_pos = hash(finger.get_address().as_bytes());
             if is_between(node_pos, self.pos, key, true, true) {
                 return Ok(Response::new(FingerEntryMsg {
@@ -248,15 +180,17 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_node_summary(&self, _: Request<Empty>) -> Result<Response<NodeSummaryMsg>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
-        let predecessor = self.predecessor.lock().unwrap().clone();
-
+        let predecessor_option = self.predecessor_option.lock().unwrap();
 
         Ok(Response::new(NodeSummaryMsg {
             url: self.address.clone(),
             pos: self.pos.to_be_bytes().iter()
                 .map(|byte| byte.to_string())
                 .collect::<Vec<String>>().join(" "),
-            predecessor: Some(predecessor.into()),
+            predecessor: match predecessor_option.clone() {
+                Some(predecessor) => Some(predecessor.into()),
+                None => None
+            },
             finger_entries: finger_table_guard.fingers.iter()
                 .map(|finger| finger.clone())
                 .map(|finger| finger.into())
@@ -266,13 +200,13 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
         Ok(Response::new(GetKvStoreSizeResponse {
-            size: self.kv_store_arc.lock().unwrap().size() as u32
+            size: self.kv_store.lock().unwrap().size() as u32
         }))
     }
 
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
         let kv_pairs = {
-            self.kv_store_arc.lock().unwrap().iter(HashPos::one() + 1, HashPos::one(), false, false)
+            self.kv_store.lock().unwrap().iter(HashPos::one() + 1, HashPos::one(), false, false)
                 .map(|(key, value)| KvPairDebugMsg {
                     key: key.map(|b| b.to_string()).join(" "),
                     value: value.clone(),
@@ -285,33 +219,34 @@ impl chord_proto::chord_server::Chord for ChordService {
 
 
     async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
-        let key: Key = request.get_ref().clone().key.try_into().unwrap();
-        let predecessor_address = {
-            self.predecessor.lock().unwrap().get_address().clone()
-        };
-        let predecessor_key = hash(predecessor_address.as_bytes());
-        if is_between(hash(&key), predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
-            match self.kv_store_arc.lock().unwrap().get(&key) {
-                Some(value) => {
-                    // info!("Get request for key {}, value = {}", key, value);
-                    Ok(Response::new(GetResponse {
-                        value: value.clone(),
-                        status: GetStatus::Ok.into(),
-                    }))
-                }
-                None => {
-                    Ok(Response::new(GetResponse {
-                        value: String::default(),
-                        status: GetStatus::NotFound.into(),
-                    }))
-                }
-            }
-        } else {
-            // error!("Invalid key {}!", key);
-            error!("This node is responsible for interval ({}, {}] !", predecessor_key, self.pos);
-            let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
-            Err(Status::internal(msg))
-        }
+        // let key: Key = request.into_inner().key.try_into().unwrap();
+        // let predecessor_address = {
+        //     self.predecessor_option.lock().unwrap().get_address().clone()
+        // };
+        // let predecessor_key = hash(predecessor_address.as_bytes());
+        // if is_between(hash(&key), predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
+        //     match self.kv_store.lock().unwrap().get(&key) {
+        //         Some(value) => {
+        //             // info!("Get request for key {}, value = {}", key, value);
+        //             Ok(Response::new(GetResponse {
+        //                 value: value.clone(),
+        //                 status: GetStatus::Ok.into(),
+        //             }))
+        //         }
+        //         None => {
+        //             Ok(Response::new(GetResponse {
+        //                 value: String::default(),
+        //                 status: GetStatus::NotFound.into(),
+        //             }))
+        //         }
+        //     }
+        // } else {
+        //     // error!("Invalid key {}!", key);
+        //     error!("This node is responsible for interval ({}, {}] !", predecessor_key, self.pos);
+        //     let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
+        //     Err(Status::internal(msg))
+        // }
+        Err(Status::internal(""))
     }
 
     async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
@@ -322,16 +257,12 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         // todo: handle ttl
         // todo: handle replication
-        let is_update = self.kv_store_arc.lock().unwrap().put(&key, value);
+        let is_update = self.kv_store.lock().unwrap().put(&key, value);
         // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
 
     async fn fix_fingers(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        if self.is_single_node_cluster() {
-            return Ok(Response::new(Empty {}))
-        }
-
         debug!("Fixing fingers...");
         for i in 0..HashPos::finger_count() {
             let lookup_position = self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0;
@@ -342,14 +273,13 @@ impl chord_proto::chord_server::Chord for ChordService {
 
             self.finger_table.lock().unwrap().fingers[i].address = responsible_node_for_lookup_pos.address;
         }
-        Ok(Response::new(Empty{}))
-
+        Ok(Response::new(Empty {}))
     }
 
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        if self.is_single_node_cluster() {
-            return Ok(Response::new(Empty {}))
-        }
+        // if self.is_single_node_cluster() {
+        //     return Ok(Response::new(Empty {}));
+        // }
 
         info!("Stabilizing...");
         let successor_address = {
@@ -360,9 +290,11 @@ impl chord_proto::chord_server::Chord for ChordService {
             .await
             .unwrap();
 
-        let current_successors_predecessor_address: Address = successor_client.get_predecessor(Request::new(Empty{}))
+        let current_successors_predecessor_address: Address = successor_client.get_predecessor(Request::new(Empty {}))
             .await
-            .unwrap().into_inner().into();
+            .unwrap().into_inner().address_optional.unwrap().into();
+
+
         let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
         let successor_pos = hash(successor_address.as_bytes());
 
@@ -375,26 +307,143 @@ impl chord_proto::chord_server::Chord for ChordService {
             .await
             .unwrap();
 
-        Ok(Response::new(Empty{}))
+        Ok(Response::new(Empty {}))
     }
 
-    async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Empty>, Status> {
+
+    // async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Empty>, Status> {
+    //     let caller_address: Address = request.into_inner().into();
+    //     let caller_pos = hash(caller_address.as_bytes());
+    //     let predecessor_pos = {
+    //         hash(self.predecessor_option.lock().unwrap().address.as_bytes())
+    //     };
+    //
+    //     if is_between(caller_pos, predecessor_pos, self.pos, true, true) {
+    //         let mut predecessor_guard = self.predecessor_option.lock().unwrap();
+    //         predecessor_guard.key = caller_pos;
+    //         predecessor_guard.address = caller_address;
+    //         debug!("Updated predecessor due to notify-call");
+    //     }
+    //     Ok(Response::new(Empty {}))
+    // }
+    //
+    // async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+    //     Ok(Response::new(Empty {}))
+    // }
+
+    type NotifyStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
+
+    async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Self::NotifyStream>, Status> {
+        let (tx, rx) = mpsc::unbounded_channel();
+
         let caller_address: Address = request.into_inner().into();
         let caller_pos = hash(caller_address.as_bytes());
-        let predecessor_pos = {
-            hash(self.predecessor.lock().unwrap().address.as_bytes())
+
+        let mut predecessor_option_guard = self.predecessor_option.lock().unwrap();
+
+        let (caller_is_new_predecessor, lower, upper) = {
+            match *predecessor_option_guard {
+                Some(ref predecessor) => {
+                    if is_between(caller_pos, hash(predecessor.address.as_bytes()), self.pos, true, true) {
+                        (true, HashPos::default(), HashPos::default())
+                    } else {
+                        (false, HashPos::default(), HashPos::default())
+                    }
+                }
+                None => {
+                    (true, HashPos::default(), caller_pos)
+                }
+            }
         };
 
-        if is_between(caller_pos, predecessor_pos, self.pos, true, true) {
-            let mut predecessor_guard = self.predecessor.lock().unwrap();
-            predecessor_guard.key = caller_pos;
-            predecessor_guard.address = caller_address;
+        if caller_is_new_predecessor {
+            *predecessor_option_guard = Some(FingerEntry {
+                key: caller_pos,
+                address: caller_address
+            });
             debug!("Updated predecessor due to notify-call");
         }
-        Ok(Response::new(Empty {}))
+
+        // let kv_store_arc = self.kv_store.clone();
+        // tokio::spawn(async move {
+        //     if caller_is_new_predecessor {
+        //         let mut transferred_keys: Vec<Key> = vec![];
+        //         {
+        //             info!("Handing over data from {} to {}", lower, upper);
+        //             let kv_store_guard = kv_store_arc.lock().unwrap();
+        //             let mut pair_count = 0;
+        //             for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
+        //                 transferred_keys.push(key.clone());
+        //                 debug!("Handing over KV pair ({:?}, {})", key, value);
+        //                 if let Err(err) = tx.send(Ok(KvPairMsg {
+        //                     key: key.to_vec(),
+        //                     value: value.clone(),
+        //                 })) {
+        //                     error!("ERROR: failed to update stream client: {:?}", err);
+        //                 };
+        //                 pair_count += 1;
+        //             }
+        //             info!("Data handoff finished, transferred {} pairs", pair_count)
+        //         }
+        //
+        //         let mut kv_store_guard = kv_store_arc.lock().unwrap();
+        //         for key in &transferred_keys {
+        //             kv_store_guard.delete(key);
+        //         }
+        //     }
+        // });
+
+        let stream = UnboundedReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(stream) as Self::NotifyStream))
     }
 
     async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
+
+    // async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Self::SetPredecessorStream>, Status> {
+    //     let new_predecessor: FingerEntry = request.get_ref().into();
+    //     let upper = new_predecessor.key;
+    //
+    //     info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
+    //
+    //     let lower: HashPos = {
+    //         let mut predecessor = self.predecessor.lock().unwrap();
+    //         let lower = predecessor.key;
+    //         *predecessor = new_predecessor;
+    //         lower
+    //     };
+    //
+    //     let (tx, rx) = mpsc::unbounded_channel();
+    //     let kv_store_arc = self.kv_store_arc.clone();
+    //
+    //     tokio::spawn(async move {
+    //         let mut transferred_keys: Vec<Key> = vec![];
+    //         {
+    //             info!("Handing over data from {} to {}", lower, upper);
+    //             let kv_store_guard = kv_store_arc.lock().unwrap();
+    //             let mut pair_count = 0;
+    //             for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
+    //                 transferred_keys.push(key.clone());
+    //                 debug!("Handing over KV pair ({:?}, {})", key, value);
+    //                 if let Err(err) = tx.send(Ok(KvPairMsg {
+    //                     key: key.to_vec(),
+    //                     value: value.clone(),
+    //                 })) {
+    //                     error!("ERROR: failed to update stream client: {:?}", err);
+    //                 };
+    //                 pair_count += 1;
+    //             }
+    //             info!("Data handoff finished, transferred {} pairs", pair_count)
+    //         }
+    //
+    //         let mut kv_store_guard = kv_store_arc.lock().unwrap();
+    //         for key in &transferred_keys {
+    //             kv_store_guard.delete(key);
+    //         }
+    //     });
+    //
+    //     let stream = UnboundedReceiverStream::new(rx);
+    //     Ok(Response::new(Box::pin(stream) as Self::SetPredecessorStream))
+    // }
 }
