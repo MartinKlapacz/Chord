@@ -89,17 +89,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     exit(0)
     // }));
 
-    // info!("Starting up periodic fix_fingers call");
-    // thread_handles.push(tokio::spawn(async move {
-    //     fix_fingers_periodically(cloned_grpc_addr_4).await
-    // }));
-
     thread_handles.push(tokio::spawn(async move {
-        stabilize_periodically(cloned_grpc_addr_5).await
+        info!("Starting up periodic fix_fingers thread");
+        fix_fingers_periodically(cloned_grpc_addr_4)
+            .await
     }));
 
     thread_handles.push(tokio::spawn(async move {
-        check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor).await
+        info!("Starting up periodic stabilization thread");
+        stabilize_periodically(cloned_grpc_addr_5)
+            .await
+    }));
+
+    thread_handles.push(tokio::spawn(async move {
+        info!("Starting up periodic predecessor health check thread");
+        check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor)
+            .await
     }));
 
     for handle in thread_handles {

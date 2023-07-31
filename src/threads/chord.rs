@@ -28,6 +28,7 @@ pub struct ChordService {
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
     kv_store: Arc<Mutex<dyn KVStore + Send>>,
+    fix_finger_index: Arc<Mutex<usize>>,
 }
 
 
@@ -40,6 +41,7 @@ impl ChordService {
             finger_table: finger_table_arc,
             predecessor_option: predecessor_option_arc,
             kv_store: kv_store_arc,
+            fix_finger_index: Arc::new(Mutex::new(0))
         }
     }
 
@@ -262,20 +264,21 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn fix_fingers(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         debug!("Fixing fingers...");
-        for i in 0..HashPos::finger_count() {
-            let lookup_position = self.pos.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0;
+        let index = (*self.fix_finger_index.lock().unwrap() + 1) % HashPos::finger_count();
+        let lookup_position = self.pos.overflowing_add(HashPos::one().overflowing_shl(index as u32).0).0;
 
-            let responsible_node_for_lookup_pos = self.find_successor(Request::new(HashPosMsg {
-                key: lookup_position.to_be_bytes().to_vec(),
-            })).await.unwrap().into_inner();
+        let responsible_node_for_lookup_pos: Address = self.find_successor(Request::new(HashPosMsg {
+            key: lookup_position.to_be_bytes().to_vec(),
+        })).await.unwrap().into_inner().into();
 
-            self.finger_table.lock().unwrap().fingers[i].address = responsible_node_for_lookup_pos.address;
-        }
+        *self.fix_finger_index.lock().unwrap() = index;
+        self.finger_table.lock().unwrap().fingers[index].address = responsible_node_for_lookup_pos;
+
         Ok(Response::new(Empty {}))
     }
 
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        info!("Stabilizing...");
+        debug!("Stabilizing...");
         let successor_address = {
             self.finger_table.lock().unwrap().fingers[0].address.clone()
         };
@@ -393,49 +396,4 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
-    // async fn set_predecessor(&self, request: Request<AddressMsg>) -> Result<Response<Self::SetPredecessorStream>, Status> {
-    //     let new_predecessor: FingerEntry = request.get_ref().into();
-    //     let upper = new_predecessor.key;
-    //
-    //     info!("Received set_predecessor call, new predecessor is {:?}", new_predecessor);
-    //
-    //     let lower: HashPos = {
-    //         let mut predecessor = self.predecessor.lock().unwrap();
-    //         let lower = predecessor.key;
-    //         *predecessor = new_predecessor;
-    //         lower
-    //     };
-    //
-    //     let (tx, rx) = mpsc::unbounded_channel();
-    //     let kv_store_arc = self.kv_store_arc.clone();
-    //
-    //     tokio::spawn(async move {
-    //         let mut transferred_keys: Vec<Key> = vec![];
-    //         {
-    //             info!("Handing over data from {} to {}", lower, upper);
-    //             let kv_store_guard = kv_store_arc.lock().unwrap();
-    //             let mut pair_count = 0;
-    //             for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
-    //                 transferred_keys.push(key.clone());
-    //                 debug!("Handing over KV pair ({:?}, {})", key, value);
-    //                 if let Err(err) = tx.send(Ok(KvPairMsg {
-    //                     key: key.to_vec(),
-    //                     value: value.clone(),
-    //                 })) {
-    //                     error!("ERROR: failed to update stream client: {:?}", err);
-    //                 };
-    //                 pair_count += 1;
-    //             }
-    //             info!("Data handoff finished, transferred {} pairs", pair_count)
-    //         }
-    //
-    //         let mut kv_store_guard = kv_store_arc.lock().unwrap();
-    //         for key in &transferred_keys {
-    //             kv_store_guard.delete(key);
-    //         }
-    //     });
-    //
-    //     let stream = UnboundedReceiverStream::new(rx);
-    //     Ok(Response::new(Box::pin(stream) as Self::SetPredecessorStream))
-    // }
 }
