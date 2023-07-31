@@ -93,10 +93,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // thread_handles.push(tokio::spawn(async move {
     //     fix_fingers_periodically(cloned_grpc_addr_4).await
     // }));
-    //
-    // thread_handles.push(tokio::spawn(async move {
-    //     stabilize_periodically(cloned_grpc_addr_5).await
-    // }));
+
+    thread_handles.push(tokio::spawn(async move {
+        stabilize_periodically(cloned_grpc_addr_5).await
+    }));
 
     thread_handles.push(tokio::spawn(async move {
         check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor).await

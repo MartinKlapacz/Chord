@@ -5,6 +5,7 @@ use log::debug;
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
 use tonic::Request;
+use chord::utils::constants::HEALTH_SLEEP_MILLIS;
 use crate::node::finger_entry::FingerEntry;
 use crate::threads::chord::Address;
 
@@ -37,7 +38,7 @@ pub async fn check_predecessor_health_periodically(local_grpc_service_address: S
                         }
                     }
 
-                    sleep(Duration::from_millis(STABILIZE_SLEEP_MILLIS)).await;
+                    sleep(Duration::from_millis(HEALTH_SLEEP_MILLIS)).await;
                 }
             }
             Err(e) => {

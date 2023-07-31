@@ -144,9 +144,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 Address::default()
             }
         };
-        Ok(Response::new(GetPredecessorResponse {
-            address_optional: None,
-        }))
+        Ok(Response::new(GetPredecessorResponse {address_optional: Some(predecessor.into()) }))
     }
 
     // type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
@@ -277,31 +275,45 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        // if self.is_single_node_cluster() {
-        //     return Ok(Response::new(Empty {}));
-        // }
-
         info!("Stabilizing...");
         let successor_address = {
             self.finger_table.lock().unwrap().fingers[0].address.clone()
         };
 
+        let current_successors_predecessor_address_optional: Option<Address> = {
+            match ChordClient::connect(format!("http://{}", successor_address).clone()).await {
+                Ok(mut successor_client) => {
+                    successor_client.get_predecessor(Request::new(Empty {}))
+                        .await
+                        .unwrap().into_inner().address_optional.map(|address| address.into())
+                }
+                Err(_) => {
+                    // todo: handle successor unreachable
+
+
+                    None
+                }
+            }
+        };
+
+        if current_successors_predecessor_address_optional.is_some() {
+            let current_successors_predecessor_address = current_successors_predecessor_address_optional.unwrap();
+            if !current_successors_predecessor_address.is_empty() {
+                let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
+                let successor_pos = hash(successor_address.as_bytes());
+                if is_between(current_successors_predecessor_pos, self.pos, successor_pos, true, true)
+                    || (self.pos == successor_pos && current_successors_predecessor_pos != self.pos) {
+                    *self.finger_table.lock().unwrap().fingers[0].get_address_mut() = current_successors_predecessor_address;
+                }
+            }
+        }
+
+        let successor_address = {
+            self.finger_table.lock().unwrap().fingers[0].get_address().clone()
+        };
         let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", successor_address).clone())
             .await
             .unwrap();
-
-        let current_successors_predecessor_address: Address = successor_client.get_predecessor(Request::new(Empty {}))
-            .await
-            .unwrap().into_inner().address_optional.unwrap().into();
-
-
-        let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
-        let successor_pos = hash(successor_address.as_bytes());
-
-        if is_between(current_successors_predecessor_pos, self.pos, successor_pos, true, true) {
-            self.finger_table.lock().unwrap().fingers[0].address = current_successors_predecessor_address;
-            debug!("Updated successor due to stabilization-call");
-        }
 
         successor_client.notify(Request::new(self.address.clone().into()))
             .await
@@ -310,26 +322,6 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
-
-    // async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Empty>, Status> {
-    //     let caller_address: Address = request.into_inner().into();
-    //     let caller_pos = hash(caller_address.as_bytes());
-    //     let predecessor_pos = {
-    //         hash(self.predecessor_option.lock().unwrap().address.as_bytes())
-    //     };
-    //
-    //     if is_between(caller_pos, predecessor_pos, self.pos, true, true) {
-    //         let mut predecessor_guard = self.predecessor_option.lock().unwrap();
-    //         predecessor_guard.key = caller_pos;
-    //         predecessor_guard.address = caller_address;
-    //         debug!("Updated predecessor due to notify-call");
-    //     }
-    //     Ok(Response::new(Empty {}))
-    // }
-    //
-    // async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
-    //     Ok(Response::new(Empty {}))
-    // }
 
     type NotifyStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
 
@@ -341,25 +333,25 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let mut predecessor_option_guard = self.predecessor_option.lock().unwrap();
 
-        let (caller_is_new_predecessor, lower, upper) = {
-            match *predecessor_option_guard {
-                Some(ref predecessor) => {
-                    if is_between(caller_pos, hash(predecessor.address.as_bytes()), self.pos, true, true) {
-                        (true, HashPos::default(), HashPos::default())
-                    } else {
-                        (false, HashPos::default(), HashPos::default())
-                    }
+        let (update_predecessor_to_caller, lower, upper) = match *predecessor_option_guard {
+            Some(ref predecessor) => {
+                let lower = hash(predecessor.address.as_bytes());
+                let upper = self.pos;
+                if is_between(caller_pos, lower, upper, true, true) || (lower == upper && caller_pos != lower) {
+                    (true, lower, upper)
+                } else {
+                    (false, HashPos::default(), HashPos::default())
                 }
-                None => {
-                    (true, HashPos::default(), caller_pos)
-                }
+            }
+            None => {
+                (true, HashPos::default(), caller_pos)
             }
         };
 
-        if caller_is_new_predecessor {
+        if update_predecessor_to_caller {
             *predecessor_option_guard = Some(FingerEntry {
                 key: caller_pos,
-                address: caller_address
+                address: caller_address,
             });
             debug!("Updated predecessor due to notify-call");
         }
