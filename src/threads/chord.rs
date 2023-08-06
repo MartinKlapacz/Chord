@@ -78,7 +78,7 @@ impl ChordService {
     }
 
     pub async fn get_successor_address(&self, ) -> Address {
-        self.finger_table.lock().unwrap().fingers[0].get_address().clone()
+        self.successor_list.lock().unwrap().successors[0].clone()
     }
 
 }
@@ -129,7 +129,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(GetPredecessorResponse { address_optional: Some(predecessor.into()) }))
     }
 
-    async fn get_successor_list(&self, request: Request<Empty>) -> Result<Response<SuccessorListMsg>, Status> {
+    async fn get_successor_list(&self, _: Request<Empty>) -> Result<Response<SuccessorListMsg>, Status> {
         Ok(Response::new(self.successor_list.lock().unwrap().clone().into()))
     }
 
@@ -158,6 +158,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn get_node_summary(&self, _: Request<Empty>) -> Result<Response<NodeSummaryMsg>, Status> {
         let finger_table_guard = self.finger_table.lock().unwrap();
         let predecessor_option = self.predecessor_option.lock().unwrap();
+        let successor_list = self.successor_list.lock().unwrap();
 
         Ok(Response::new(NodeSummaryMsg {
             url: self.address.clone(),
@@ -172,6 +173,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 .map(|finger| finger.clone())
                 .map(|finger| finger.into())
                 .collect(),
+            successor_list: Some(successor_list.clone().into())
         }))
     }
 
@@ -271,9 +273,9 @@ impl chord_proto::chord_server::Chord for ChordService {
                     // todo: handle successor unreachable
                     let mut i = 1;
                     let mut finger_table_guard = self.finger_table.lock().unwrap();
-                    let successor_address = finger_table_guard.fingers[0].get_address();
+                    let successor_address = { self.successor_list.lock().unwrap().successors[0].clone() };
 
-                    while i < finger_table_guard.fingers.len() && finger_table_guard.fingers[i].address.eq(successor_address) {
+                    while i < finger_table_guard.fingers.len() && finger_table_guard.fingers[i].address.eq(&successor_address) {
                         i += 1;
                     }
 

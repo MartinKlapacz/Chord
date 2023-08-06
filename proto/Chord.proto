@@ -61,6 +61,7 @@ message NodeSummaryMsg {
   string pos = 2;
   FingerEntryDebugMsg predecessor = 3;
   repeated FingerEntryDebugMsg fingerEntries = 4;
+  SuccessorListMsg successorList = 5;
 }
 
 // hashtable RPCs
