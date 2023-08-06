@@ -1,4 +1,6 @@
-use crate::threads::chord::Address;
+use tonic::transport::Channel;
+use crate::threads::chord::{Address, connect_with_retry};
+use crate::threads::chord::chord_proto::chord_client::ChordClient;
 
 pub const SUCCESSOR_LIST_SIZE: usize = 3;
 
@@ -32,28 +34,7 @@ impl SuccessorList {
             }
         }
     }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test1() {
-        let mut l1 = SuccessorList::new(&"foo".to_string(), &"ba1".to_string());
-        l1.successors.push("bar2".to_string());
-        l1.successors.push("bar3".to_string());
-
-        let mut l2 = SuccessorList::new(&"foo2".to_string(), &"ba1".to_string());
-        l2.successors.push("bar2".to_string());
-        l2.successors.push("bar3".to_string());
-
-        l1.update_with_other_succ_list(l2);
-
-        print!("{:?}", l1)
-    }
+    
 
 }
+

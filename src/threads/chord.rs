@@ -81,6 +81,19 @@ impl ChordService {
         self.successor_list.lock().unwrap().successors[0].clone()
     }
 
+    pub async fn get_client_for_closest_successor(&self, ) -> (ChordClient<Channel>, Address) {
+        let successors = {
+            self.successor_list.lock().unwrap().successors.clone()
+        };
+        for ref successor_address in successors {
+            match connect_with_retry(successor_address).await {
+                Ok(successor_client) => return (successor_client, successor_address.clone()),
+                Err(_) => {}
+            }
+        };
+        panic!();
+    }
+
 }
 
 
@@ -250,8 +263,12 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         match responsible_node_for_lookup_pos_response_result {
             Ok(responsible_node_for_lookup_pos_response) => {
+                let responsible_node_address: Address = responsible_node_for_lookup_pos_response.into_inner().into();
+                if index == 1 {
+                    self.successor_list.lock().unwrap().successors[0] = responsible_node_address.clone();
+                }
                 *self.fix_finger_index.lock().unwrap() = index;
-                self.finger_table.lock().unwrap().fingers[index].address = responsible_node_for_lookup_pos_response.into_inner().into();
+                self.finger_table.lock().unwrap().fingers[index].address = responsible_node_address;
             }
             Err(e) => warn!("An error occurred during fix_fingers: {}", e)
         }
@@ -259,44 +276,31 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        debug!("Stabilizing...");
-        let successor_address = self.get_successor_address().await;
+        let (mut current_successor_client, current_successor_address) = self.get_client_for_closest_successor().await;
+        let current_successors_predecessor_address_optional: Option<Address> = current_successor_client.get_predecessor(Request::new(Empty {}))
+            .await
+            .unwrap().into_inner().address_optional.map(|address| address.into());
 
-        let current_successors_predecessor_address_optional: Option<Address> = {
-            match ChordClient::connect(format!("http://{}", successor_address).clone()).await {
-                Ok(mut successor_client) => {
-                    successor_client.get_predecessor(Request::new(Empty {}))
-                        .await
-                        .unwrap().into_inner().address_optional.map(|address| address.into())
-                }
-                Err(_) => {
-                    // todo: handle successor unreachable
-                    let mut i = 1;
-                    let mut finger_table_guard = self.finger_table.lock().unwrap();
-                    let successor_address = { self.successor_list.lock().unwrap().successors[0].clone() };
-
-                    while i < finger_table_guard.fingers.len() && finger_table_guard.fingers[i].address.eq(&successor_address) {
-                        i += 1;
-                    }
-
-                    let new_successor_address = if i == finger_table_guard.fingers.len() {
-                        match *self.predecessor_option.lock().unwrap() {
-                            Some(ref predecessor) => predecessor.address.clone(),
-                            None => self.address.clone()
-                        }
-                    } else {
-                        finger_table_guard.fingers[i].get_address().clone()
-                    };
-
-                    for index in 0..i {
-                        *finger_table_guard.fingers[index].get_address_mut() = new_successor_address.clone();
-                    }
-                    return Ok(Response::new(Empty {}));
+        if let Some(current_successors_predecessor_address) = current_successors_predecessor_address_optional {
+            if !current_successors_predecessor_address.is_empty() {
+                let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
+                let successor_pos = hash(current_successor_address.as_bytes());
+                if is_between(current_successors_predecessor_pos, self.pos + 1, successor_pos, false, true) {
+                    *self.finger_table.lock().unwrap().fingers[0].get_address_mut() = current_successors_predecessor_address.clone();
+                    self.successor_list.lock().unwrap().successors[0] = current_successors_predecessor_address;
                 }
             }
+        }
+
+        let successor_address = {
+            self.finger_table.lock().unwrap().fingers[0].get_address().clone()
         };
-
-
+        let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", successor_address).clone())
+            .await
+            .unwrap();
+        successor_client.notify(Request::new(self.address.clone().into()))
+            .await
+            .unwrap();
         Ok(Response::new(Empty {}))
     }
 
