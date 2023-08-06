@@ -20,21 +20,10 @@ impl SuccessorList {
     }
 
     pub fn update_with_other_succ_list(&mut self, other_list: SuccessorList) -> () {
-        self.successors = vec![other_list.own_address.clone()];
-        if other_list.successors.len() == 1 {
-            return;
-        }
-        for (i, successor) in other_list.successors.iter().enumerate() {
-            if self.successors.len() > SUCCESSOR_LIST_SIZE {
-                break
-            }
-            self.successors.push(successor.clone());
-            if self.own_address.eq(successor) {
-                break;
-            }
+        self.successors = other_list.successors.clone();
+        self.successors.insert(0, other_list.own_address.clone());
+        if self.successors.len() > SUCCESSOR_LIST_SIZE {
+            self.successors.pop();
         }
     }
-    
-
 }
-
