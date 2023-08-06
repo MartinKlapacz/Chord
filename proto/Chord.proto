@@ -90,11 +90,16 @@ message GetPredecessorResponse {
    optional AddressMsg address_optional = 1;
 }
 
+message SuccessorListMsg {
+  AddressMsg own_address = 1;
+  repeated AddressMsg successors = 2;
+}
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
-  rpc GetDirectSuccessor (Empty) returns (AddressMsg);
+  rpc GetSuccessorList (Empty) returns (SuccessorListMsg);
   rpc FindClosestPrecedingFinger (HashPosMsg) returns (FingerEntryMsg);
 
   // debugging

@@ -17,7 +17,8 @@ use tonic::transport::Channel;
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest};
+use crate::node::successor_list::SuccessorList;
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashPos, HashRingKey, is_between};
 
@@ -35,6 +36,7 @@ pub struct ChordService {
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
     kv_store: Arc<Mutex<dyn KVStore + Send>>,
     fix_finger_index: Arc<Mutex<usize>>,
+    successor_list: Arc<Mutex<SuccessorList>>
 }
 
 const MAX_RETRIES: u64 = 30;
@@ -62,8 +64,8 @@ pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<Chor
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
-        let (finger_table_arc, predecessor_option_arc, kv_store_arc) = rx.await.unwrap();
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
+        let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
             pos: hash(&url.as_bytes()),
@@ -71,6 +73,7 @@ impl ChordService {
             predecessor_option: predecessor_option_arc,
             kv_store: kv_store_arc,
             fix_finger_index: Arc::new(Mutex::new(0)),
+            successor_list: successor_list_arc
         }
     }
 
@@ -126,12 +129,8 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(GetPredecessorResponse { address_optional: Some(predecessor.into()) }))
     }
 
-    // type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
-
-
-    async fn get_direct_successor(&self, _: Request<Empty>) -> Result<Response<AddressMsg>, Status> {
-        let finger_table_guard = self.finger_table.lock().unwrap().fingers[0].clone();
-        Ok(Response::new(finger_table_guard.into()))
+    async fn get_successor_list(&self, request: Request<Empty>) -> Result<Response<SuccessorListMsg>, Status> {
+        Ok(Response::new(self.successor_list.lock().unwrap().clone().into()))
     }
 
 
@@ -369,4 +368,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
+
+
+
 }
