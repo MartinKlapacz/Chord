@@ -37,9 +37,10 @@ pub struct ChordService {
     fix_finger_index: Arc<Mutex<usize>>,
 }
 
-const MAX_RETRIES: u32 = 30;
+const MAX_RETRIES: u64 = 30;
+const CONNECTION_RETRY_SLEEP: u64 = 100;
 
-pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<ChordClient<Channel>, Box<dyn std::error::Error>> {
+pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<ChordClient<Channel>, Status> {
     let mut retries = 0;
 
     loop {
@@ -49,11 +50,11 @@ pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<Chor
                 retries += 1;
                 if retries > MAX_RETRIES {
                     // You can return an error or handle it differently
-                    return Err(Box::new(e));
+                    return Err(Status::unavailable("Reached maximum number of connection retries"));
                 }
                 // Log error or do something with it
                 eprintln!("Failed to connect: {}. Retrying...", e);
-                sleep(Duration::from_millis(200)).await; // Wait 100 ms before retrying
+                sleep(Duration::from_millis(CONNECTION_RETRY_SLEEP)).await; // Wait 100 ms before retrying
             }
         }
     }
@@ -99,12 +100,11 @@ impl chord_proto::chord_server::Chord for ChordService {
             })).await.unwrap().into_inner().address;
 
             let mut closest_preceding_node_client = connect_with_retry(&closest_preceding_node_address)
-                .await
-                .unwrap();
+                .await?;
 
             closest_preceding_node_client.find_successor(Request::new(key.into()))
-                .await
-                .unwrap().into_inner()
+                .await?
+                .into_inner()
         };
 
         debug!("Received find_successor call for {:?}, successor is {:?}", key, successor_address_msg);
@@ -252,11 +252,8 @@ impl chord_proto::chord_server::Chord for ChordService {
                 *self.fix_finger_index.lock().unwrap() = index;
                 self.finger_table.lock().unwrap().fingers[index].address = responsible_node_for_lookup_pos_response.into_inner().into();
             }
-            Err(e) => {
-                warn!("Sucessor unreachable, retrying to fix_fingers...")
-            }
+            Err(e) => warn!("An error occurred during fix_fingers: {}", e)
         }
-
         Ok(Response::new(Empty {}))
     }
 
@@ -298,28 +295,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             }
         };
 
-        if current_successors_predecessor_address_optional.is_some() {
-            let current_successors_predecessor_address = current_successors_predecessor_address_optional.unwrap();
-            if !current_successors_predecessor_address.is_empty() {
-                let current_successors_predecessor_pos = hash(current_successors_predecessor_address.as_bytes());
-                let successor_pos = hash(successor_address.as_bytes());
-                if is_between(current_successors_predecessor_pos, self.pos, successor_pos, true, true)
-                    || (self.pos == successor_pos && current_successors_predecessor_pos != self.pos) {
-                    *self.finger_table.lock().unwrap().fingers[0].get_address_mut() = current_successors_predecessor_address;
-                }
-            }
-        }
 
-        let successor_address = {
-            self.finger_table.lock().unwrap().fingers[0].get_address().clone()
-        };
-        let mut successor_client: ChordClient<Channel> = connect_with_retry(&successor_address)
-            .await
-            .unwrap();
-
-        successor_client.notify(Request::new(self.address.clone().into()))
-            .await
-            .unwrap().into_inner();
         Ok(Response::new(Empty {}))
     }
 

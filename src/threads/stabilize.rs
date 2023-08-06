@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::debug;
+use log::{debug, warn};
 use tokio::time::sleep;
 use tonic::Request;
 
@@ -14,9 +14,10 @@ pub async fn stabilize_periodically(local_grpc_service_address: String) -> ! {
             Ok(mut client) => {
                 debug!("Successfully connected to local grpc service");
                 loop {
-                    client.stabilize(Request::new(Empty {}))
-                        .await
-                        .unwrap();
+                    match client.stabilize(Request::new(Empty {})).await {
+                        Err(error) => warn!("An error occured during stabilization"),
+                        _ => {}
+                    }
                     sleep(Duration::from_millis(STABILIZE_SLEEP_MILLIS)).await;
                 }
             }

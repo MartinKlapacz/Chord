@@ -10,7 +10,6 @@ use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::{Address, connect_with_retry};
-use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::HashPosMsg;
 use crate::utils::crypto::hash;
 
