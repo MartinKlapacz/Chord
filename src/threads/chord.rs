@@ -1,12 +1,17 @@
+use std::future::IntoFuture;
+use std::ops::Add;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use log::{debug, info};
+use log::{debug, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
-use tokio_stream::Stream;
+use tokio::time::sleep;
+use tokio_stream::{Stream, StreamExt};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status};
+use tonic::codegen::Body;
 use tonic::transport::Channel;
 
 use crate::kv::kv_store::KVStore;
@@ -15,6 +20,7 @@ use crate::node::finger_table::FingerTable;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashPos, HashRingKey, is_between};
+
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
@@ -31,6 +37,28 @@ pub struct ChordService {
     fix_finger_index: Arc<Mutex<usize>>,
 }
 
+const MAX_RETRIES: u32 = 30;
+
+pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<ChordClient<Channel>, Box<dyn std::error::Error>> {
+    let mut retries = 0;
+
+    loop {
+        match ChordClient::connect(format!("http://{}", current_address)).await {
+            Ok(client) => return Ok(client),
+            Err(e) => {
+                retries += 1;
+                if retries > MAX_RETRIES {
+                    // You can return an error or handle it differently
+                    return Err(Box::new(e));
+                }
+                // Log error or do something with it
+                eprintln!("Failed to connect: {}. Retrying...", e);
+                sleep(Duration::from_millis(200)).await; // Wait 100 ms before retrying
+            }
+        }
+    }
+}
+
 
 impl ChordService {
     pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>)>, url: &String) -> ChordService {
@@ -41,27 +69,14 @@ impl ChordService {
             finger_table: finger_table_arc,
             predecessor_option: predecessor_option_arc,
             kv_store: kv_store_arc,
-            fix_finger_index: Arc::new(Mutex::new(0))
+            fix_finger_index: Arc::new(Mutex::new(0)),
         }
     }
 
-    pub fn is_successor_of_key(&self, key: HashPos) -> bool {
-        match *self.predecessor_option.lock().unwrap() {
-            Some(ref predecessor) => {
-                let predecessor_pos = predecessor.get_key().clone();
-                if predecessor_pos < self.pos {
-                    return predecessor_pos < key && key <= self.pos;
-                } else if predecessor_pos > self.pos {
-                    return predecessor_pos < key || key <= self.pos;
-                } else {
-                    return true;
-                }
-            }
-            None => {
-                false
-            }
-        }
+    pub async fn get_successor_address(&self, ) -> Address {
+        self.finger_table.lock().unwrap().fingers[0].get_address().clone()
     }
+
 }
 
 
@@ -71,69 +86,31 @@ impl chord_proto::chord_server::Chord for ChordService {
         &self,
         request: Request<chord_proto::HashPosMsg>,
     ) -> Result<Response<chord_proto::AddressMsg>, Status> {
-        let key_msg: &HashPosMsg = request.get_ref();
+        let key: HashPos = request.into_inner().into();
 
-        let successor_finger_entry: FingerEntry = match self.is_successor_of_key(key_msg.into()) {
-            true => self.address.clone().into(),
-            false => {
-                let find_predecessor_response = self.find_predecessor(Request::new(request.get_ref().clone()))
-                    .await
-                    .unwrap();
-                let mut predecessor_client = ChordClient::connect(format!("http://{}", find_predecessor_response.get_ref().address))
-                    .await
-                    .unwrap();
-                let successor_of_key_predecessor_response = predecessor_client.get_direct_successor(Request::new(Empty {}))
-                    .await
-                    .unwrap();
-                successor_of_key_predecessor_response.get_ref().address.clone().into()
-            }
+        let direct_successor_address = self.get_successor_address().await;
+        let successor_pos: HashPos = hash(direct_successor_address.as_bytes());
+
+        let successor_address_msg: AddressMsg = if is_between(key, self.pos + 1, successor_pos, false, false) {
+            direct_successor_address.into()
+        } else {
+            let closest_preceding_node_address = self.find_closest_preceding_finger(Request::new(HashPosMsg {
+                key: key.to_be_bytes().to_vec()
+            })).await.unwrap().into_inner().address;
+
+            let mut closest_preceding_node_client = connect_with_retry(&closest_preceding_node_address)
+                .await
+                .unwrap();
+
+            closest_preceding_node_client.find_successor(Request::new(key.into()))
+                .await
+                .unwrap().into_inner()
         };
-        debug!("Received find_successor call for {:?}, successor is {:?}", key_msg, successor_finger_entry);
-        Ok(Response::new(successor_finger_entry.into()))
+
+        debug!("Received find_successor call for {:?}, successor is {:?}", key, successor_address_msg);
+        Ok(Response::new(successor_address_msg))
     }
 
-
-    async fn find_predecessor(&self, request: Request<HashPosMsg>) -> Result<Response<AddressMsg>, Status> {
-        let look_up_key = HashPos::from_be_bytes(request.get_ref().key.clone().try_into().unwrap());
-
-        // current
-        let mut current_address: Address = self.address.clone();
-        let mut current_key: HashPos = hash(&current_address.as_bytes());
-
-        // successor
-        let mut current_successor_address: Address = {
-            let finger_table_guard = self.finger_table.lock().unwrap();
-            finger_table_guard.fingers[0].get_address().clone()
-        };
-        let mut current_successor_key: HashPos = hash(&current_successor_address.as_bytes());
-
-
-        while (!is_between(look_up_key, current_key, current_successor_key, true, false)) && current_key != current_successor_key {
-            let mut current_client = ChordClient::connect(format!("http://{}", &current_successor_address))
-                .await
-                .unwrap();
-            let response = current_client.find_closest_preceding_finger(Request::new(HashPosMsg {
-                key: look_up_key.to_be_bytes().to_vec(),
-            })).await.unwrap();
-
-            // update current
-            current_address = response.get_ref().address.clone();
-            current_key = HashPos::from_be_bytes(response.get_ref().id.clone().try_into().unwrap());
-
-            current_client = ChordClient::connect(format!("http://{}", current_address))
-                .await
-                .unwrap();
-            let response = current_client.get_direct_successor(Request::new(Empty {}))
-                .await
-                .unwrap();
-
-            // update successor
-            current_successor_address = response.get_ref().into();
-            current_successor_key = hash(&current_successor_address.as_bytes());
-        }
-
-        Ok(Response::new(current_address.into()))
-    }
 
     async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<GetPredecessorResponse>, Status> {
         let predecessor = match *self.predecessor_option.lock().unwrap() {
@@ -146,7 +123,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 Address::default()
             }
         };
-        Ok(Response::new(GetPredecessorResponse {address_optional: Some(predecessor.into()) }))
+        Ok(Response::new(GetPredecessorResponse { address_optional: Some(predecessor.into()) }))
     }
 
     // type SetPredecessorStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
@@ -162,6 +139,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         let key = HashPos::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
             if finger.address.eq(&Address::default()) {
+                // ignore yet uninitialized entries
                 continue;
             }
             let node_pos = hash(finger.get_address().as_bytes());
@@ -212,9 +190,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                     value: value.clone(),
                 }).collect()
         };
-        Ok(Response::new(GetKvStoreDataResponse {
-            kv_pairs
-        }))
+        Ok(Response::new(GetKvStoreDataResponse { kv_pairs }))
     }
 
 
@@ -263,25 +239,30 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn fix_fingers(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
-        debug!("Fixing fingers...");
         let index = (*self.fix_finger_index.lock().unwrap() + 1) % HashPos::finger_count();
+        debug!("Fixing finger entry {}", index);
         let lookup_position = self.pos.overflowing_add(HashPos::one().overflowing_shl(index as u32).0).0;
 
-        let responsible_node_for_lookup_pos: Address = self.find_successor(Request::new(HashPosMsg {
+        let responsible_node_for_lookup_pos_response_result = self.find_successor(Request::new(HashPosMsg {
             key: lookup_position.to_be_bytes().to_vec(),
-        })).await.unwrap().into_inner().into();
+        })).await;
 
-        *self.fix_finger_index.lock().unwrap() = index;
-        self.finger_table.lock().unwrap().fingers[index].address = responsible_node_for_lookup_pos;
+        match responsible_node_for_lookup_pos_response_result {
+            Ok(responsible_node_for_lookup_pos_response) => {
+                *self.fix_finger_index.lock().unwrap() = index;
+                self.finger_table.lock().unwrap().fingers[index].address = responsible_node_for_lookup_pos_response.into_inner().into();
+            }
+            Err(e) => {
+                warn!("Sucessor unreachable, retrying to fix_fingers...")
+            }
+        }
 
         Ok(Response::new(Empty {}))
     }
 
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         debug!("Stabilizing...");
-        let successor_address = {
-            self.finger_table.lock().unwrap().fingers[0].address.clone()
-        };
+        let successor_address = self.get_successor_address().await;
 
         let current_successors_predecessor_address_optional: Option<Address> = {
             match ChordClient::connect(format!("http://{}", successor_address).clone()).await {
@@ -292,9 +273,27 @@ impl chord_proto::chord_server::Chord for ChordService {
                 }
                 Err(_) => {
                     // todo: handle successor unreachable
+                    let mut i = 1;
+                    let mut finger_table_guard = self.finger_table.lock().unwrap();
+                    let successor_address = finger_table_guard.fingers[0].get_address();
 
+                    while i < finger_table_guard.fingers.len() && finger_table_guard.fingers[i].address.eq(successor_address) {
+                        i += 1;
+                    }
 
-                    None
+                    let new_successor_address = if i == finger_table_guard.fingers.len() {
+                        match *self.predecessor_option.lock().unwrap() {
+                            Some(ref predecessor) => predecessor.address.clone(),
+                            None => self.address.clone()
+                        }
+                    } else {
+                        finger_table_guard.fingers[i].get_address().clone()
+                    };
+
+                    for index in 0..i {
+                        *finger_table_guard.fingers[index].get_address_mut() = new_successor_address.clone();
+                    }
+                    return Ok(Response::new(Empty {}));
                 }
             }
         };
@@ -314,14 +313,13 @@ impl chord_proto::chord_server::Chord for ChordService {
         let successor_address = {
             self.finger_table.lock().unwrap().fingers[0].get_address().clone()
         };
-        let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", successor_address).clone())
+        let mut successor_client: ChordClient<Channel> = connect_with_retry(&successor_address)
             .await
             .unwrap();
 
         successor_client.notify(Request::new(self.address.clone().into()))
             .await
-            .unwrap();
-
+            .unwrap().into_inner();
         Ok(Response::new(Empty {}))
     }
 
@@ -340,7 +338,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             Some(ref predecessor) => {
                 let lower = hash(predecessor.address.as_bytes());
                 let upper = self.pos;
-                if is_between(caller_pos, lower, upper, true, true) || (lower == upper && caller_pos != lower) {
+                if is_between(caller_pos, lower + 1, upper, false, true) {
                     (true, lower, upper)
                 } else {
                     (false, HashPos::default(), HashPos::default())
@@ -395,5 +393,4 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
-
 }

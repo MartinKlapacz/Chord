@@ -1,3 +1,4 @@
+use log::info;
 use tokio::process::{Child, Command};
 use tokio::time::{Duration, sleep};
 use tonic::Request;
@@ -20,9 +21,17 @@ const DURATION: Duration = Duration::from_secs(20 as u64);
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let (node_ports, child_handles) = start_up_nodes(8)
-            .await;
-        sleep(Duration::from_secs(20)).await;
+        let node_ports = [
+            5601,
+            5602,
+            5603,
+            5604,
+            5605,
+            5606,
+            5607,
+            // 5611,
+        ];
+        // sleep(Duration::from_secs(20)).await;
         for node_port in node_ports {
             let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
                 .await
@@ -119,7 +128,7 @@ async fn start_up_nodes(node_count: usize) -> (Vec<u16>, Vec<Child>) {
         child_handles.push(child_handle);
         ports.push(grpc_node_port);
 
-        println!("Started up node on port {}", grpc_node_port);
+        info!("Started up node on port {}", grpc_node_port);
         sleep(DURATION).await;
     }
     (ports, child_handles)

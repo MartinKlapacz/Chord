@@ -9,7 +9,7 @@ use crate::kv::hash_map_store::HashMapStore;
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::Address;
+use crate::threads::chord::{Address, connect_with_retry};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::HashPosMsg;
 use crate::utils::crypto::hash;
@@ -28,7 +28,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
     match peer_address_option {
         Some(peer_address_str) => {
             info!("Joining existing cluster");
-            let mut join_peer_client = ChordClient::connect(format!("http://{}", peer_address_str))
+            let mut join_peer_client = connect_with_retry(&peer_address_str)
                 .await
                 .unwrap();
             let successor_address: Address = join_peer_client.find_successor(Request::new(HashPosMsg {
