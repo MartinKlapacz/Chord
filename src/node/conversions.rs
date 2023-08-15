@@ -1,6 +1,8 @@
+use tonic::codegen::Body;
 use crate::threads::chord::Address;
-use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, HashPosMsg};
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, HashPosMsg, SuccessorListMsg};
 use crate::node::finger_entry::FingerEntry;
+use crate::node::successor_list::SuccessorList;
 
 use crate::utils::crypto;
 use crate::utils::crypto::HashPos;
@@ -209,5 +211,23 @@ impl Into<FingerEntryDebugMsg> for FingerEntry {
 impl Into<FingerEntryDebugMsg> for &FingerEntry {
     fn into(self) -> FingerEntryDebugMsg {
         self.clone().into()
+    }
+}
+
+impl Into<SuccessorListMsg> for SuccessorList {
+    fn into(self) -> SuccessorListMsg {
+        SuccessorListMsg {
+            own_address: Some(self.own_address.into()),
+            successors: self.successors.iter().map(|succ| succ.into()).collect()
+        }
+    }
+}
+
+impl Into<SuccessorList> for SuccessorListMsg {
+    fn into(self) -> SuccessorList {
+        SuccessorList {
+            own_address: self.own_address.unwrap().into(),
+            successors: self.successors.iter().map(|succ| succ.into()).collect(),
+        }
     }
 }

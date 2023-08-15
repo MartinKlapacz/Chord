@@ -104,6 +104,7 @@ async fn perform_chord_look_up(key: &HashPos, grpc_address: &str) -> ChordClient
     let mut local_node_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", grpc_address))
         .await
         .unwrap();
+    // todo: retry find_sucessor if error
     let response = local_node_client.find_successor(Request::new(HashPosMsg {
         key: key.to_be_bytes().to_vec()
     })).await.unwrap();
