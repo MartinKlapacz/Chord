@@ -8,7 +8,7 @@ use chord::utils;
 use chord::utils::crypto::HashPos;
 use utils::crypto;
 
-use crate::chord_proto::{Empty, NodeSummaryMsg};
+use crate::chord_proto::{Empty, NodeSummaryMsg, SuccessorListMsg};
 use crate::chord_proto::chord_client::ChordClient;
 
 pub mod chord_proto {
@@ -22,12 +22,12 @@ async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
         let node_ports = [
-            5601,
+            // 5601,
             5602,
-            // 5603,
-            // 5604,
+            5603,
+            5604,
             // 5605,
-            // 5606,
+            5606,
             // 5607,
             // 5611,
         ];
@@ -63,6 +63,7 @@ async fn main() {
         }
     }
 
+    // validate finger entries
     let mut is_valid = true;
     for i in 0..node_summaries.len() {
         let fingers = &node_summaries[i].finger_entries;
@@ -83,6 +84,23 @@ async fn main() {
             }
         }
     }
+
+    // validate predecessor list
+    for (i, node_summary) in node_summaries.iter().enumerate() {
+        let successor_list = node_summary.successor_list.as_ref();
+        for (j, successor_according_to_list) in successor_list.unwrap().successors.iter().enumerate() {
+            let actual_successor_address = &node_summaries[(i + j + 1) % node_summaries.len()].url;
+            if successor_according_to_list.address.ne(actual_successor_address) {
+                eprintln!("-----");
+                eprintln!("Node ({}, {}): Wrong successor list! ", node_summaries[i].pos, node_summaries[i].url);
+                eprintln!("Actual successor address: {}, but was {}", actual_successor_address, successor_according_to_list.address);
+                eprintln!("-----");
+                is_valid = false;
+            }
+        }
+    }
+
+
     if is_valid {
         eprintln!("Looks good!")
     } else {

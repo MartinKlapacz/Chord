@@ -14,6 +14,7 @@ use crate::threads::health::check_predecessor_health_periodically;
 use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
+use crate::threads::successor_list::check_successor_list_periodically;
 use crate::threads::tcp_service::handle_client_connection;
 use crate::utils::cli::Cli;
 
@@ -43,14 +44,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_4 = args.grpc_address.clone();
     let cloned_grpc_addr_5 = args.grpc_address.clone();
     let cloned_grpc_addr_6 = args.grpc_address.clone();
+    let cloned_grpc_addr_7 = args.grpc_address.clone();
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
     let (tx3, rx_check_predecessor) = oneshot::channel();
+    let (tx4, rx_successor_list) = oneshot::channel();
 
     info!("Starting up setup thread");
     thread_handles.push(tokio::spawn(async move {
-        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3)
+        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
             .await
             .unwrap();
     }));
@@ -104,6 +107,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up periodic predecessor health check thread");
         check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor)
+            .await
+    }));
+
+    thread_handles.push(tokio::spawn(async move {
+        info!("Starting up periodic successor list check thread");
+        check_successor_list_periodically(cloned_grpc_addr_7, rx_successor_list)
             .await
     }));
 
