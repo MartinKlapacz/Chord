@@ -10,7 +10,7 @@ use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
 use tokio_stream::{Stream, StreamExt};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 use tonic::codegen::Body;
 use tonic::transport::Channel;
 
@@ -76,7 +76,7 @@ impl ChordService {
         }
     }
 
-    pub async fn get_successor_address(&self, ) -> Address {
+    pub async fn get_successor_address(&self) -> Address {
         self.successor_list.lock().unwrap().successors[0].clone()
     }
 
@@ -86,7 +86,7 @@ impl ChordService {
     }
 
 
-    pub async fn get_client_for_closest_successor(&self, ) -> (ChordClient<Channel>, Address) {
+    pub async fn get_client_for_closest_successor(&self) -> (ChordClient<Channel>, Address) {
         let successors = {
             self.successor_list.lock().unwrap().successors.clone()
         };
@@ -99,7 +99,7 @@ impl ChordService {
         panic!();
     }
 
-    pub async fn get_predecessor_client(&self, ) -> Option<ChordClient<Channel>> {
+    pub async fn get_predecessor_client(&self) -> Option<ChordClient<Channel>> {
         let predecessor_option_clone = {
             self.predecessor_option.lock().unwrap().clone()
         };
@@ -397,6 +397,14 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let stream = UnboundedReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream) as Self::NotifyStream))
+    }
+
+    async fn handoff(&self, request: Request<Streaming<KvPairMsg>>) -> Result<Response<Empty>, Status> {
+        let mut stream = request.into_inner();
+        while let Some(kv_msg) = stream.message().await? {
+            println!("Received kv pair: {:?}", kv_msg);
+        };
+        Ok(Response::new(Empty {}))
     }
 
     async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {

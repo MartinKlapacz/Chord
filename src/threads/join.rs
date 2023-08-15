@@ -16,7 +16,7 @@ use crate::utils::crypto::hash;
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String,
                                tx_grpc_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>, Arc<Mutex<SuccessorList>>)>,
-                               tx_handoff_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<dyn KVStore + Send>>)>,
+                               tx_handoff_thread: Sender<Arc<Mutex<dyn KVStore + Send>>>,
                                tx_check_predecessor: Sender<Arc<Mutex<Option<FingerEntry>>>>,
                                tx_successor_list: Sender<Arc<Mutex<SuccessorList>>>,
 ) -> Result<(), Box<dyn Error>> {
@@ -55,7 +55,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
     };
 
     tx_grpc_thread.send((finger_table_arc.clone(), predecessor_option_arc.clone(), kv_store_arc.clone(), successor_list_arc.clone())).unwrap();
-    tx_handoff_thread.send((finger_table_arc, kv_store_arc)).unwrap();
+    tx_handoff_thread.send(kv_store_arc).unwrap();
     tx_check_predecessor.send(predecessor_option_arc).unwrap();
     tx_successor_list.send(successor_list_arc).unwrap();
     Ok(())
