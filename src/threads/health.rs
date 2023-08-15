@@ -7,11 +7,10 @@ use tokio::time::sleep;
 use tonic::Request;
 use chord::utils::constants::HEALTH_SLEEP_MILLIS;
 use crate::node::finger_entry::FingerEntry;
-use crate::threads::chord::Address;
 
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;
-use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS, STABILIZE_SLEEP_MILLIS};
+use crate::utils::constants::{CONNECTION_RETRY_UPON_FAILURE_MILLIS};
 
 pub async fn check_predecessor_health_periodically(local_grpc_service_address: String, rx: Receiver<Arc<Mutex<Option<FingerEntry>>>>) -> ! {
     let predecessor_arc = rx.await.unwrap();
@@ -25,9 +24,8 @@ pub async fn check_predecessor_health_periodically(local_grpc_service_address: S
                         .await
                         .unwrap().into_inner().address_optional;
 
-                    if predecessor_address_msg_optional.is_some() {
-                        let predecessor_address: Address = predecessor_address_msg_optional.unwrap().into();
-                        match ChordClient::connect(format!("http://{}", predecessor_address)).await {
+                    if let Some(predecessor_address_msg) = predecessor_address_msg_optional {
+                        match ChordClient::connect(format!("http://{}", predecessor_address_msg.address)).await {
                             Ok(mut predecessor_client) => {
                                 match predecessor_client.health(Request::new(Empty {})).await {
                                     Ok(response) => debug!("predecessor node healthy"),
@@ -51,6 +49,5 @@ pub async fn check_predecessor_health_periodically(local_grpc_service_address: S
 
 async fn unset_predecessor(predecessor_arc: Arc<Mutex<Option<FingerEntry>>>) -> () {
     debug!("Predecessor unavailable, setting predecessor to Nil");
-    let mut predecessor_guard = predecessor_arc.lock().unwrap();
-    *predecessor_guard = None;
+    *predecessor_arc.lock().unwrap() = None;
 }
