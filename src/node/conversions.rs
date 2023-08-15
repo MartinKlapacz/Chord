@@ -1,9 +1,11 @@
+use tonic::codegen::Body;
 use crate::threads::chord::Address;
-use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, KeyMsg};
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, HashPosMsg, SuccessorListMsg};
 use crate::node::finger_entry::FingerEntry;
+use crate::node::successor_list::SuccessorList;
 
 use crate::utils::crypto;
-use crate::utils::crypto::Key;
+use crate::utils::crypto::HashPos;
 
 impl Into<FingerEntryMsg> for AddressMsg {
     fn into(self) -> FingerEntryMsg {
@@ -53,7 +55,7 @@ impl Into<FingerEntryMsg> for &FingerEntry {
 impl Into<FingerEntry> for FingerEntryMsg {
     fn into(self) -> FingerEntry {
         FingerEntry {
-            key: Key::from_be_bytes(self.id.try_into().unwrap()),
+            key: HashPos::from_be_bytes(self.id.try_into().unwrap()),
             address: self.address,
         }
     }
@@ -122,50 +124,50 @@ impl Into<Address> for &AddressMsg {
     }
 }
 
-impl Into<KeyMsg> for AddressMsg {
-    fn into(self) -> KeyMsg {
-        KeyMsg {
+impl Into<HashPosMsg> for AddressMsg {
+    fn into(self) -> HashPosMsg {
+        HashPosMsg {
             key: crypto::hash(&self.address.as_bytes()).to_be_bytes().to_vec()
         }
     }
 }
 
-impl Into<KeyMsg> for &AddressMsg {
-    fn into(self) -> KeyMsg {
+impl Into<HashPosMsg> for &AddressMsg {
+    fn into(self) -> HashPosMsg {
         self.clone().into()
     }
 }
 
-impl Into<KeyMsg> for Key {
-    fn into(self) -> KeyMsg {
-        KeyMsg {
+impl Into<HashPosMsg> for HashPos {
+    fn into(self) -> HashPosMsg {
+        HashPosMsg {
             key: self.to_be_bytes().to_vec()
         }
     }
 }
 
-impl Into<KeyMsg> for &Key {
-    fn into(self) -> KeyMsg {
+impl Into<HashPosMsg> for &HashPos {
+    fn into(self) -> HashPosMsg {
         self.clone().into()
     }
 }
 
 
-impl Into<Key> for KeyMsg {
-    fn into(self) -> Key {
-        Key::from_be_bytes(self.key.try_into().unwrap())
+impl Into<HashPos> for HashPosMsg {
+    fn into(self) -> HashPos {
+        HashPos::from_be_bytes(self.key.try_into().unwrap())
     }
 }
 
-impl Into<Key> for &KeyMsg {
-    fn into(self) -> Key {
+impl Into<HashPos> for &HashPosMsg {
+    fn into(self) -> HashPos {
         self.clone().into()
     }
 }
 
-impl Into<KeyMsg> for &mut FingerEntry {
-    fn into(self) -> KeyMsg {
-        KeyMsg {
+impl Into<HashPosMsg> for &mut FingerEntry {
+    fn into(self) -> HashPosMsg {
+        HashPosMsg {
             key: self.key.to_be_bytes().to_vec(),
         }
     }
@@ -186,14 +188,14 @@ impl Into<FingerEntry> for &Address {
     }
 }
 
-impl Into<Key> for FingerEntry {
-    fn into(self) -> Key {
-        Key::from_be_bytes(self.key.to_be_bytes())
+impl Into<HashPos> for FingerEntry {
+    fn into(self) -> HashPos {
+        HashPos::from_be_bytes(self.key.to_be_bytes())
     }
 }
 
-impl Into<Key> for &FingerEntry {
-    fn into(self) -> Key {
+impl Into<HashPos> for &FingerEntry {
+    fn into(self) -> HashPos {
         self.clone().into()
     }
 }
@@ -209,5 +211,23 @@ impl Into<FingerEntryDebugMsg> for FingerEntry {
 impl Into<FingerEntryDebugMsg> for &FingerEntry {
     fn into(self) -> FingerEntryDebugMsg {
         self.clone().into()
+    }
+}
+
+impl Into<SuccessorListMsg> for SuccessorList {
+    fn into(self) -> SuccessorListMsg {
+        SuccessorListMsg {
+            own_address: Some(self.own_address.into()),
+            successors: self.successors.iter().map(|succ| succ.into()).collect()
+        }
+    }
+}
+
+impl Into<SuccessorList> for SuccessorListMsg {
+    fn into(self) -> SuccessorList {
+        SuccessorList {
+            own_address: self.own_address.unwrap().into(),
+            successors: self.successors.iter().map(|succ| succ.into()).collect(),
+        }
     }
 }

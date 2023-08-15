@@ -1,11 +1,9 @@
 use std::error::Error;
-use std::process::exit;
 use tokio::signal;
 use tokio::sync::oneshot::Receiver;
 
 use std::sync::{Arc, Mutex};
 
-use log::info;
 use crate::kv::kv_store::KVStore;
 use crate::node::finger_table::FingerTable;
 
