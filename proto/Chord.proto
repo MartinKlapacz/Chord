@@ -61,6 +61,7 @@ message NodeSummaryMsg {
   string pos = 2;
   FingerEntryDebugMsg predecessor = 3;
   repeated FingerEntryDebugMsg fingerEntries = 4;
+  SuccessorListMsg successorList = 5;
 }
 
 // hashtable RPCs
@@ -86,15 +87,20 @@ message PutRequest {
   string value = 4;
 }
 
+message GetPredecessorResponse {
+   optional AddressMsg address_optional = 1;
+}
+
+message SuccessorListMsg {
+  AddressMsg own_address = 1;
+  repeated AddressMsg successors = 2;
+}
 
 service Chord {
   // chord protocol
   rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
-  rpc FindPredecessor (HashPosMsg) returns (AddressMsg);
-  rpc GetPredecessor (Empty) returns (AddressMsg);
-  rpc SetPredecessor (AddressMsg) returns (stream KvPairMsg);
-  rpc GetDirectSuccessor (Empty) returns (AddressMsg);
-  rpc UpdateFingerTableEntry (UpdateFingerTableEntryRequest) returns (Empty);
+  rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
+  rpc GetSuccessorList (Empty) returns (SuccessorListMsg);
   rpc FindClosestPrecedingFinger (HashPosMsg) returns (FingerEntryMsg);
 
   // debugging
@@ -109,5 +115,8 @@ service Chord {
   // stabilization
   rpc FixFingers(Empty) returns (Empty);
   rpc Stabilize(Empty) returns (Empty);
-  rpc Notify(AddressMsg) returns (Empty);
+  rpc Notify(AddressMsg) returns (stream KvPairMsg);
+
+  // security
+  rpc Health(Empty) returns (Empty);
 }

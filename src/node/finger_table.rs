@@ -11,13 +11,13 @@ pub struct FingerTable {
 }
 
 impl FingerTable {
-    pub fn new(key: &HashPos, address: &Address) -> FingerTable {
+    pub fn new(key: &HashPos) -> FingerTable {
         let mut fingers = Vec::new();
         for i in 0..HashPos::finger_count() {
             fingers.push(FingerEntry {
                 // key: (key + 2u128.pow(i as u32)) % 2u128.pow(finger_count as u32),
                 key: key.overflowing_add(HashPos::one().overflowing_shl(i as u32).0).0,
-                address: address.clone(),
+                address: Address::default(),
             });
         };
         FingerTable { fingers }
@@ -31,6 +31,10 @@ impl FingerTable {
         for mut finger in &mut self.fingers {
             finger.address = address.clone();
         }
+    }
+
+    pub fn get_successor_address(&self) -> Address {
+        self.fingers[0].address.clone()
     }
 }
 
