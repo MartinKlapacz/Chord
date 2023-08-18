@@ -9,6 +9,9 @@ pub trait KVStore : Debug {
     fn put(&mut self, key: &Key, value: &Value) -> bool;
     fn delete(&mut self, key: &Key) -> bool;
     fn iter(&self, lower: HashPos, upper: HashPos, left_open: bool, right_open: bool) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_>;
+    fn iter_full(&self, ) -> Box<dyn Iterator<Item=(&Key, &Value)> + '_> {
+        self.iter(HashPos::MIN, HashPos::MAX, false, false)
+    }
     fn size(&self) -> usize;
 }
 
