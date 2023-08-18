@@ -1,14 +1,13 @@
-use std::fmt::{Debug, Pointer};
+use std::fmt::Debug;
 use std::fmt;
 
 use crate::threads::chord::Address;
-use crate::threads::chord::chord_proto::{FingerEntryDebugMsg, FingerEntryMsg, FingerTableMsg, KeyMsg};
-use crate::utils::crypto::Key;
+use crate::utils::crypto::HashPos;
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct FingerEntry {
-    pub(crate) key: Key,
+    pub(crate) key: HashPos,
     pub(crate) address: Address,
 }
 
@@ -22,14 +21,14 @@ impl Debug for FingerEntry {
 }
 
 impl FingerEntry {
-    pub fn new(key: &Key, address: &Address) -> Self {
+    pub fn new(key: &HashPos, address: &Address) -> Self {
         FingerEntry {
             address: address.clone(),
             key: key.clone(),
         }
     }
 
-    pub fn get_key(&self) -> &Key {
+    pub fn get_key(&self) -> &HashPos {
         &self.key
     }
 
