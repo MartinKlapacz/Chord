@@ -117,6 +117,8 @@ service Chord {
   rpc Stabilize(Empty) returns (Empty);
   rpc Notify(AddressMsg) returns (stream KvPairMsg);
 
+  rpc handoff(stream KvPairMsg) returns (Empty);
+
   // security
   rpc Health(Empty) returns (Empty);
 }

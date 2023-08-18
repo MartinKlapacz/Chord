@@ -1,20 +1,22 @@
+use std::collections::HashMap;
 use std::future::IntoFuture;
 use std::ops::Add;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
 use tokio_stream::{Stream, StreamExt};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tonic::{Request, Response, Status};
-use tonic::codegen::Body;
+use tonic::{Request, Response, Status, Streaming};
 use tonic::transport::Channel;
 
-use crate::kv::kv_store::KVStore;
+use chord::utils::crypto::Key;
+
+use crate::kv::kv_store::{KVStore, Value};
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
@@ -33,7 +35,7 @@ pub struct ChordService {
     pos: HashPos,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
-    kv_store: Arc<Mutex<dyn KVStore + Send>>,
+    kv_store: Arc<Mutex<HashMap<Key, Value>>>,
     fix_finger_index: Arc<Mutex<usize>>,
     successor_list: Arc<Mutex<SuccessorList>>,
 }
@@ -41,11 +43,11 @@ pub struct ChordService {
 const MAX_RETRIES: u64 = 15;
 const CONNECTION_RETRY_SLEEP: u64 = 100;
 
-pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<ChordClient<Channel>, Status> {
+pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<Channel>, Status> {
     let mut retries = 0;
 
     loop {
-        match ChordClient::connect(format!("http://{}", current_address)).await {
+        match ChordClient::connect(format!("http://{}", address)).await {
             Ok(client) => return Ok(client),
             Err(e) => {
                 retries += 1;
@@ -54,7 +56,7 @@ pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<Chor
                     return Err(Status::unavailable("Reached maximum number of connection retries"));
                 }
                 // Log error or do something with it
-                warn!("Failed to connect: {}. Retrying...", e);
+                warn!("Failed to connect to {}: {}. Retrying...", address, e);
                 sleep(Duration::from_millis(CONNECTION_RETRY_SLEEP)).await; // Wait 100 ms before retrying
             }
         }
@@ -63,7 +65,7 @@ pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<Chor
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<dyn KVStore + Send>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
         let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
@@ -76,7 +78,7 @@ impl ChordService {
         }
     }
 
-    pub async fn get_successor_address(&self, ) -> Address {
+    pub async fn get_successor_address(&self) -> Address {
         self.successor_list.lock().unwrap().successors[0].clone()
     }
 
@@ -86,7 +88,7 @@ impl ChordService {
     }
 
 
-    pub async fn get_client_for_closest_successor(&self, ) -> (ChordClient<Channel>, Address) {
+    pub async fn get_client_for_closest_successor(&self) -> (ChordClient<Channel>, Address) {
         let successors = {
             self.successor_list.lock().unwrap().successors.clone()
         };
@@ -99,7 +101,7 @@ impl ChordService {
         panic!();
     }
 
-    pub async fn get_predecessor_client(&self, ) -> Option<ChordClient<Channel>> {
+    pub async fn get_predecessor_client(&self) -> Option<ChordClient<Channel>> {
         let predecessor_option_clone = {
             self.predecessor_option.lock().unwrap().clone()
         };
@@ -224,13 +226,16 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
         Ok(Response::new(GetKvStoreSizeResponse {
-            size: self.kv_store.lock().unwrap().size() as u32
+            size: self.kv_store.lock().unwrap().len() as u32
         }))
     }
 
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
         let kv_pairs = {
-            self.kv_store.lock().unwrap().iter(HashPos::one() + 1, HashPos::one(), false, false)
+            let one = HashPos::one();
+            self.kv_store.lock().unwrap()
+                .iter()
+                .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
                 .map(|(key, value)| KvPairDebugMsg {
                     key: key.map(|b| b.to_string()).join(" "),
                     value: value.clone(),
@@ -279,7 +284,8 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         // todo: handle ttl
         // todo: handle replication
-        let is_update = self.kv_store.lock().unwrap().put(&key, value);
+
+        let is_update = self.kv_store.lock().unwrap().insert(key, value.clone());
         // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
@@ -397,6 +403,20 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let stream = UnboundedReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream) as Self::NotifyStream))
+    }
+
+    async fn handoff(&self, request: Request<Streaming<KvPairMsg>>) -> Result<Response<Empty>, Status> {
+        let mut stream = request.into_inner();
+        let mut counter = 0;
+        info!("Receiving handoff data from predecessor!");
+        while let Some(kv_msg) = stream.message().await? {
+            let key: Key = kv_msg.key.try_into().unwrap();
+            self.kv_store.lock().unwrap().insert(key, kv_msg.value);
+            debug!("Received kv-pair!");
+            counter += 1;
+        };
+        info!("Received {} from predecessor", counter);
+        Ok(Response::new(Empty {}))
     }
 
     async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
