@@ -25,19 +25,24 @@ pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<
     info!("Shutdown handoff thread ready...");
     match signal::ctrl_c().await {
         Ok(()) => {
+            info!("Preparing shutdown...");
+            // todo: connect to nearest successor that is actually reachable
             let successor_list: SuccessorList = local_grpc_client.get_successor_list(Request::new(Empty {}))
                 .await
                 .unwrap().into_inner().into();
 
-            let mut successor_client = connect_with_retry(&successor_list.successors[0])
+            let successor_address = &successor_list.successors[0];
+            let mut successor_client = connect_with_retry(successor_address)
                 .await
                 .unwrap();
 
             let one = HashPos::one();
+            let mut counter = 0;
             let foo: Vec<KvPairMsg> = {
                 let bar = kv_store_arc.lock().unwrap();
                 bar.iter()
                     .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
+                    .inspect(|_| { counter += 1; })
                     .map(|(k, v)| {
                         KvPairMsg {
                             key: k.to_vec(),
@@ -48,6 +53,7 @@ pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<
             };
 
             let _ = successor_client.handoff(Request::new(iter(foo))).await;
+            info!("Transfered {} key-value-pairs to {}", counter, successor_address);
         }
         Err(err) => {
             error!("Unable to listen for shutdown signal: {}", err);

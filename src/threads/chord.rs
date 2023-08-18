@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
@@ -43,11 +43,11 @@ pub struct ChordService {
 const MAX_RETRIES: u64 = 15;
 const CONNECTION_RETRY_SLEEP: u64 = 100;
 
-pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<ChordClient<Channel>, Status> {
+pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<Channel>, Status> {
     let mut retries = 0;
 
     loop {
-        match ChordClient::connect(format!("http://{}", current_address)).await {
+        match ChordClient::connect(format!("http://{}", address)).await {
             Ok(client) => return Ok(client),
             Err(e) => {
                 retries += 1;
@@ -56,7 +56,7 @@ pub(crate) async fn connect_with_retry(current_address: &Address) -> Result<Chor
                     return Err(Status::unavailable("Reached maximum number of connection retries"));
                 }
                 // Log error or do something with it
-                warn!("Failed to connect: {}. Retrying...", e);
+                warn!("Failed to connect to {}: {}. Retrying...", address, e);
                 sleep(Duration::from_millis(CONNECTION_RETRY_SLEEP)).await; // Wait 100 ms before retrying
             }
         }
@@ -407,10 +407,15 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     async fn handoff(&self, request: Request<Streaming<KvPairMsg>>) -> Result<Response<Empty>, Status> {
         let mut stream = request.into_inner();
+        let mut counter = 0;
+        info!("Receiving handoff data from predecessor!");
         while let Some(kv_msg) = stream.message().await? {
             let key: Key = kv_msg.key.try_into().unwrap();
             self.kv_store.lock().unwrap().insert(key, kv_msg.value);
+            debug!("Received kv-pair!");
+            counter += 1;
         };
+        info!("Received {} from predecessor", counter);
         Ok(Response::new(Empty {}))
     }
 
