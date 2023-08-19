@@ -43,11 +43,11 @@ pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<
                 bar.iter()
                     .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
                     .inspect(|_| { counter += 1; })
-                    .map(|(k, (v, ttl))| {
+                    .map(|(k, (v, expiration_date))| {
                         KvPairMsg {
                             key: k.to_vec(),
                             value: v.to_string(),
-                            ttl: ttl.clone()
+                            expiration_date: expiration_date.clone()
                         }
                     })
                     .collect()

@@ -56,14 +56,20 @@ async fn handle_get(grpc_address: &String, socket: &mut TcpStream) -> Result<(),
         Some(GetStatus::NotFound) => {
             send_dht_failure(socket, key_array).await?;
         }
-        None => panic!("Received invalid get response status")
+        Some(GetStatus::Expired) => {
+            send_dht_failure(socket, key_array).await?;
+        }
+        _ => panic!("Received invalid get response status")
     }
 
     Ok(())
 }
 
 async fn handle_put(grpc_address: &String, socket: &mut TcpStream, size: u16) -> Result<(), Box<dyn Error>> {
-    let ttl = socket.read_u16().await.unwrap();
+    let mut ttl = socket.read_u16().await.unwrap();
+    if ttl == 0 {
+        ttl = u16::MAX;
+    }
     let replication = socket.read_u8().await.unwrap();
     let _reserved = socket.read_u8().await.unwrap();
 
@@ -82,7 +88,7 @@ async fn handle_put(grpc_address: &String, socket: &mut TcpStream, size: u16) ->
     let mut value_string = String::new();
 
     if socket.read_to_string(&mut value_string).await.unwrap() == remaining_msg_len {
-        info!("Processing PUT for key {} and value {} ...", hash_ring_pos, value_string);
+        info!("Processing PUT for key {}...", hash_ring_pos);
 
         let mut responsible_node_client = perform_chord_look_up(&hash_ring_pos, grpc_address.as_str())
             .await;

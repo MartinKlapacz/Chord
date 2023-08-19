@@ -22,7 +22,7 @@ async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
         let node_ports = [
-            // 5601,
+            5601,
             // 5602,
             // 5603,
             // 5604,

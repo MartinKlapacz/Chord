@@ -38,7 +38,7 @@ message GetKvStoreSizeResponse {
 message KvPairMsg {
   bytes key = 1;
   string value = 2;
-  uint64 ttl = 3;
+  uint64 expiration_date = 3;
 }
 
 message GetKvStoreDataResponse {
@@ -77,8 +77,10 @@ message GetResponse {
 }
 
 enum GetStatus {
-  OK = 0;
-  NOT_FOUND = 1;
+  GET_STATUS_NONE = 0;
+  GET_STATUS_OK = 1;
+  GET_STATUS_NOT_FOUND = 2;
+  GET_STATUS_EXPIRED = 3;
 }
 
 message PutRequest {

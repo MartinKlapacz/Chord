@@ -31,7 +31,7 @@ pub mod chord_proto {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
-    simple_logger::SimpleLogger::new().env().with_level(LevelFilter::Debug).init().unwrap();
+    simple_logger::SimpleLogger::new().env().with_level(LevelFilter::Info).init().unwrap();
 
     let tcp_addr = args.tcp_address;
 
