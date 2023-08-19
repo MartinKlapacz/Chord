@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use std::future::IntoFuture;
-use std::ops::Add;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
@@ -63,6 +61,15 @@ pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<
     }
 }
 
+pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>) -> Option<(ChordClient<Channel>, Address)> {
+    for address in address_list {
+        if let Ok(successor_client) = connect_with_retry(address).await {
+            return Some((successor_client, address.clone()))
+        }
+    };
+    None
+}
+
 
 impl ChordService {
     pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
@@ -92,13 +99,11 @@ impl ChordService {
         let successors = {
             self.successor_list.lock().unwrap().successors.clone()
         };
-        for ref successor_address in successors {
-            match connect_with_retry(successor_address).await {
-                Ok(successor_client) => return (successor_client, successor_address.clone()),
-                Err(_) => {}
-            }
-        };
-        panic!();
+        if let Some(client_and_address) = connect_to_first_reachable_node(&successors).await {
+            return client_and_address
+        } else {
+            panic!("All successor in successor list are unreachable")
+        }
     }
 
     pub async fn get_predecessor_client(&self) -> Option<ChordClient<Channel>> {
@@ -332,9 +337,15 @@ impl chord_proto::chord_server::Chord for ChordService {
         let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", self.get_successor_address().await).clone())
             .await
             .unwrap();
-        successor_client.notify(Request::new(self.address.clone().into()))
+
+        let mut data_handoff_stream = successor_client.notify(Request::new(self.address.clone().into()))
             .await
-            .unwrap();
+            .unwrap().into_inner();
+        while let Some(pair) = data_handoff_stream.message().await.unwrap() {
+            let key: Key = pair.key.try_into().unwrap();
+            self.kv_store.lock().unwrap().insert(key, pair.value);
+        }
+
         Ok(Response::new(Empty {}))
     }
 
@@ -344,62 +355,67 @@ impl chord_proto::chord_server::Chord for ChordService {
     async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Self::NotifyStream>, Status> {
         let (tx, rx) = mpsc::unbounded_channel();
 
-        let caller_address: Address = request.into_inner().into();
+        let caller_address: &Address = &request.into_inner().into();
         let caller_pos = hash(caller_address.as_bytes());
 
         let mut predecessor_option_guard = self.predecessor_option.lock().unwrap();
 
         let (update_predecessor_to_caller, lower, upper) = match *predecessor_option_guard {
-            Some(ref predecessor) => {
-                let lower = hash(predecessor.address.as_bytes());
+            Some(ref prev_predecessor) => {
+                let lower = hash(prev_predecessor.address.as_bytes());
                 let upper = self.pos;
                 if is_between(caller_pos, lower + 1, upper, false, true) {
-                    (true, lower, upper)
+                    (true, lower, caller_pos)
                 } else {
                     (false, HashPos::default(), HashPos::default())
                 }
             }
             None => {
-                (true, HashPos::default(), caller_pos)
+                (true, self.pos + 1, caller_pos)
             }
         };
 
         if update_predecessor_to_caller {
             *predecessor_option_guard = Some(FingerEntry {
                 key: caller_pos,
-                address: caller_address,
+                address: caller_address.clone(),
             });
             debug!("Updated predecessor due to notify-call");
         }
 
-        // let kv_store_arc = self.kv_store.clone();
-        // tokio::spawn(async move {
-        //     if caller_is_new_predecessor {
-        //         let mut transferred_keys: Vec<Key> = vec![];
-        //         {
-        //             info!("Handing over data from {} to {}", lower, upper);
-        //             let kv_store_guard = kv_store_arc.lock().unwrap();
-        //             let mut pair_count = 0;
-        //             for (key, value) in kv_store_guard.iter(lower, upper, true, false) {
-        //                 transferred_keys.push(key.clone());
-        //                 debug!("Handing over KV pair ({:?}, {})", key, value);
-        //                 if let Err(err) = tx.send(Ok(KvPairMsg {
-        //                     key: key.to_vec(),
-        //                     value: value.clone(),
-        //                 })) {
-        //                     error!("ERROR: failed to update stream client: {:?}", err);
-        //                 };
-        //                 pair_count += 1;
-        //             }
-        //             info!("Data handoff finished, transferred {} pairs", pair_count)
-        //         }
-        //
-        //         let mut kv_store_guard = kv_store_arc.lock().unwrap();
-        //         for key in &transferred_keys {
-        //             kv_store_guard.delete(key);
-        //         }
-        //     }
-        // });
+        let kv_store_arc = self.kv_store.clone();
+        if update_predecessor_to_caller {
+            tokio::spawn(async move {
+                info!("Handing over data from ({}, {}]", lower, upper);
+
+                let kv_store_lock_result = kv_store_arc.lock();
+                let mut kv_store_lock = kv_store_lock_result.unwrap();
+
+                let pairs_to_handoff: Vec<(Vec<u8>, String)> = kv_store_lock
+                    .iter()
+                    .filter(|(key, _)| is_between(hash(*key), lower, upper, false, false))
+                    .map(|(key, value)| (key.to_vec(), value.clone()))
+                    .collect();
+
+                for (key, value) in pairs_to_handoff.iter() {
+                    let pair = KvPairMsg {
+                        key: key.to_vec(),
+                        value: value.clone(),
+                    };
+                    debug!("Handing over KV pair ({:?}, {})", key, value);
+                    match tx.send(Ok(pair)) {
+                        Ok(_) => {
+                            let key: Key = key.clone().try_into().unwrap();
+                            kv_store_lock.remove(&key);
+                        }
+                        Err(err) => {
+                            error!("ERROR: failed to update stream client: {:?}", err)
+                        }
+                    }
+                }
+                info!("Data handoff finished, transferred {} pairs", pairs_to_handoff.len())
+            });
+        };
 
         let stream = UnboundedReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream) as Self::NotifyStream))
@@ -423,3 +439,4 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 }
+
