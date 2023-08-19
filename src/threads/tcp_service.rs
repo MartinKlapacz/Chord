@@ -12,7 +12,7 @@ use crate::threads::chord::chord_proto::{GetRequest, GetStatus, HashPosMsg, PutR
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 use crate::utils::crypto;
-use crate::utils::crypto::HashPos;
+use crate::utils::types::HashPos;
 
 pub async fn handle_client_connection(mut socket: TcpStream, grpc_address: &String) -> Result<(), Box<dyn Error>> {
     loop {

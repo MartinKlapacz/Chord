@@ -1,21 +1,18 @@
-use tonic::transport::Channel;
-use crate::threads::chord::{Address, connect_with_retry};
-use crate::threads::chord::chord_proto::chord_client::ChordClient;
+use crate::utils::types::Address;
 
 pub const SUCCESSOR_LIST_SIZE: usize = 3;
 
 #[derive(Default, Debug, Clone)]
 pub struct SuccessorList {
     pub own_address: Address,
-    pub successors: Vec<Address>
+    pub successors: Vec<Address>,
 }
 
 impl SuccessorList {
-
     pub fn new(own_address: &Address, direct_successor: &Address) -> Self {
         SuccessorList {
             own_address: own_address.clone(),
-            successors: vec![direct_successor.clone()]
+            successors: vec![direct_successor.clone()],
         }
     }
 

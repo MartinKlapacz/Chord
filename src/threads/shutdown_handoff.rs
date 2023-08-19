@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -8,15 +7,16 @@ use tokio::sync::oneshot::Receiver;
 use tokio_stream::iter;
 use tonic::Request;
 
-use chord::utils::crypto::{hash, HashPos, is_between, Key};
+use chord::utils::crypto::{hash, is_between};
+use chord::utils::types::KvStore;
 
-use crate::kv::kv_store::{KVStore, Value};
 use crate::node::successor_list::SuccessorList;
-use crate::threads::chord::{Address, connect_to_first_reachable_node, connect_with_retry};
+use crate::threads::chord::{connect_to_first_reachable_node, connect_with_retry};
 use crate::threads::chord::chord_proto::{Empty, KvPairMsg};
 use crate::utils::crypto::HashRingKey;
+use crate::utils::types::{Address, HashPos};
 
-pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<Arc<Mutex<HashMap<Key, Value>>>>) -> Result<(), Box<dyn Error>> {
+pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<Arc<Mutex<KvStore>>>) -> Result<(), Box<dyn Error>> {
     let kv_store_arc = rx.await.unwrap();
     let one = HashPos::one();
 
@@ -43,10 +43,11 @@ pub async fn shutdown_handoff(local_grpc_service_address: Address, rx: Receiver<
                 bar.iter()
                     .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
                     .inspect(|_| { counter += 1; })
-                    .map(|(k, v)| {
+                    .map(|(k, (v, ttl))| {
                         KvPairMsg {
                             key: k.to_vec(),
                             value: v.to_string(),
+                            ttl: ttl.clone()
                         }
                     })
                     .collect()

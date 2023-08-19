@@ -5,7 +5,7 @@ use tonic::Request;
 use tonic::transport::Channel;
 
 use chord::utils;
-use chord::utils::crypto::HashPos;
+use chord::utils::types::HashPos;
 use utils::crypto;
 
 use crate::chord_proto::{Empty, NodeSummaryMsg, SuccessorListMsg};

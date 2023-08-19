@@ -38,6 +38,7 @@ message GetKvStoreSizeResponse {
 message KvPairMsg {
   bytes key = 1;
   string value = 2;
+  uint64 ttl = 3;
 }
 
 message GetKvStoreDataResponse {

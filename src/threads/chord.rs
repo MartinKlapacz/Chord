@@ -12,28 +12,28 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tonic::transport::Channel;
 
-use chord::utils::crypto::Key;
+use chord::utils::types::{Address, HashPos, Key, KvStore};
 
-use crate::kv::kv_store::{KVStore, Value};
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{hash, HashPos, HashRingKey, is_between};
+use crate::utils::crypto::{hash, HashRingKey, is_between};
+use crate::utils::types::TTL;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
 }
 
-pub type Address = String;
+
 
 pub struct ChordService {
     address: String,
     pos: HashPos,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
-    kv_store: Arc<Mutex<HashMap<Key, Value>>>,
+    kv_store: Arc<Mutex<KvStore>>,
     fix_finger_index: Arc<Mutex<usize>>,
     successor_list: Arc<Mutex<SuccessorList>>,
 }
@@ -72,7 +72,7 @@ pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>)
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
         let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
@@ -243,7 +243,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
                 .map(|(key, value)| KvPairDebugMsg {
                     key: key.map(|b| b.to_string()).join(" "),
-                    value: value.clone(),
+                    value: value.0.clone(),
                 }).collect()
         };
         Ok(Response::new(GetKvStoreDataResponse { kv_pairs }))
@@ -287,10 +287,9 @@ impl chord_proto::chord_server::Chord for ChordService {
         let replication = request.get_ref().replication;
         let value = &request.get_ref().value;
 
-        // todo: handle ttl
         // todo: handle replication
 
-        let is_update = self.kv_store.lock().unwrap().insert(key, value.clone());
+        let is_update = self.kv_store.lock().unwrap().insert(key, (value.clone(), ttl));
         // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
@@ -343,7 +342,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             .unwrap().into_inner();
         while let Some(pair) = data_handoff_stream.message().await.unwrap() {
             let key: Key = pair.key.try_into().unwrap();
-            self.kv_store.lock().unwrap().insert(key, pair.value);
+            self.kv_store.lock().unwrap().insert(key, (pair.value, pair.ttl));
         }
 
         Ok(Response::new(Empty {}))
@@ -391,16 +390,17 @@ impl chord_proto::chord_server::Chord for ChordService {
                 let kv_store_lock_result = kv_store_arc.lock();
                 let mut kv_store_lock = kv_store_lock_result.unwrap();
 
-                let pairs_to_handoff: Vec<(Vec<u8>, String)> = kv_store_lock
+                let pairs_to_handoff: Vec<(Vec<u8>, String, TTL)> = kv_store_lock
                     .iter()
                     .filter(|(key, _)| is_between(hash(*key), lower, upper, false, false))
-                    .map(|(key, value)| (key.to_vec(), value.clone()))
+                    .map(|(key, (value, ttl))| (key.to_vec(), value.clone(), ttl.clone()))
                     .collect();
 
-                for (key, value) in pairs_to_handoff.iter() {
+                for (key, value, ttl) in pairs_to_handoff.iter() {
                     let pair = KvPairMsg {
                         key: key.to_vec(),
                         value: value.clone(),
+                        ttl: ttl.clone()
                     };
                     debug!("Handing over KV pair ({:?}, {})", key, value);
                     match tx.send(Ok(pair)) {
@@ -427,7 +427,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         info!("Receiving handoff data from predecessor!");
         while let Some(kv_msg) = stream.message().await? {
             let key: Key = kv_msg.key.try_into().unwrap();
-            self.kv_store.lock().unwrap().insert(key, kv_msg.value);
+            self.kv_store.lock().unwrap().insert(key, (kv_msg.value, kv_msg.ttl));
             debug!("Received kv-pair!");
             counter += 1;
         };
