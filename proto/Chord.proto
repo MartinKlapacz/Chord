@@ -17,18 +17,9 @@ message HashPosMsg {
   bytes key = 1;
 }
 
-message FingerTableMsg {
-  repeated AddressMsg fingers = 1;
-}
-
 message FingerEntryMsg {
   bytes id = 1;
   string address = 2;
-}
-
-message UpdateFingerTableEntryRequest {
-  uint32 index = 1;
-  FingerEntryMsg fingerEntry = 2;
 }
 
 message GetKvStoreSizeResponse {
