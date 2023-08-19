@@ -40,11 +40,19 @@ pub struct ChordService {
 const MAX_RETRIES: u64 = 15;
 const CONNECTION_RETRY_SLEEP: u64 = 100;
 
+
+pub(crate) async fn connect(address: &Address) -> Result<ChordClient<Channel>, tonic::transport::Error> {
+    ChordClient::connect(format!("http://{}", address)).await
+}
+
+pub(crate) async fn connect_without_retry(address: &Address) -> ChordClient<Channel> {
+    connect(address).await.unwrap()
+}
+
 pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<Channel>, Status> {
     let mut retries = 0;
-
     loop {
-        match ChordClient::connect(format!("http://{}", address)).await {
+        match connect(address).await {
             Ok(client) => return Ok(client),
             Err(e) => {
                 retries += 1;
@@ -357,9 +365,8 @@ impl chord_proto::chord_server::Chord for ChordService {
             }
         }
 
-        let mut successor_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", self.get_successor_address().await).clone())
-            .await
-            .unwrap();
+        let mut successor_client: ChordClient<Channel> = connect_without_retry(&self.get_successor_address().await)
+            .await;
 
         let mut data_handoff_stream = successor_client.notify(Request::new(self.address.clone().into()))
             .await

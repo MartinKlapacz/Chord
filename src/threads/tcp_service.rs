@@ -10,6 +10,7 @@ use tonic::transport::Channel;
 
 use crate::threads::chord::chord_proto::{GetRequest, GetStatus, HashPosMsg, PutRequest};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
+use crate::threads::chord::connect_with_retry;
 use crate::utils::constants::{DHT_FAILURE, DHT_GET, DHT_PUT, DHT_SUCCESS};
 use crate::utils::crypto;
 use crate::utils::types::HashPos;
@@ -107,18 +108,17 @@ async fn handle_put(grpc_address: &String, socket: &mut TcpStream, size: u16) ->
 }
 
 async fn perform_chord_look_up(key: &HashPos, grpc_address: &str) -> ChordClient<Channel> {
-    let mut local_node_client: ChordClient<Channel> = ChordClient::connect(format!("http://{}", grpc_address))
+    let mut local_node_client: ChordClient<Channel> = connect_with_retry(&grpc_address.to_string())
         .await
         .unwrap();
+
     // todo: retry find_sucessor if error
     let response = local_node_client.find_successor(Request::new(HashPosMsg {
         key: key.to_be_bytes().to_vec()
     })).await.unwrap();
 
     let responsible_node_address = &response.get_ref().address;
-    ChordClient::connect(format!("http://{}", responsible_node_address))
-        .await
-        .unwrap()
+    connect_with_retry(responsible_node_address).await.unwrap()
 }
 
 async fn send_dht_success(socket: &mut TcpStream, key: [u8; 32], value: Vec<u8>) -> Result<(), Box<dyn Error>> {

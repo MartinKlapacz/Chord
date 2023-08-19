@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-use crate::threads::chord::chord_proto::FingerTableMsg;
 use crate::utils::crypto::{HashRingKey};
 use crate::node::finger_entry::FingerEntry;
 use crate::utils::types::{Address, HashPos};
@@ -37,16 +36,5 @@ impl FingerTable {
         self.fingers[0].address.clone()
     }
 }
-
-impl Into<FingerTableMsg> for FingerTable {
-    fn into(self) -> FingerTableMsg {
-        let mut fingers = Vec::new();
-        for finger in self.fingers {
-            fingers.push(finger.into());
-        }
-        FingerTableMsg { fingers }
-    }
-}
-
 
 

@@ -1,14 +1,14 @@
 use std::error::Error;
-use std::process::exit;
+use std::process::{exit, id};
 
 use clap::Parser;
 use log::{info, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tonic::transport::Server;
+use tonic::transport::{Server, ServerTlsConfig};
 
-use crate::threads::chord::{ChordService};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
+use crate::threads::chord::ChordService;
 use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::health::check_predecessor_health_periodically;
 use crate::threads::join::process_node_join;
@@ -17,6 +17,8 @@ use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
 use crate::threads::tcp_service::handle_client_connection;
 use crate::utils::cli::Cli;
+
+use tonic::transport::Identity;
 
 mod node;
 mod utils;
@@ -30,9 +32,13 @@ pub mod chord_proto {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let args = Cli::parse();
-    simple_logger::SimpleLogger::new().env().with_level(LevelFilter::Info).init().unwrap();
+    simple_logger::SimpleLogger::new()
+        .env()
+        .with_level(LevelFilter::Info)
+        .init()
+        .unwrap();
 
+    let args = Cli::parse();
     let tcp_addr = args.tcp_address;
 
     let mut thread_handles = Vec::new();
@@ -51,6 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
     let (tx3, rx_check_predecessor) = oneshot::channel();
     let (tx4, rx_successor_list) = oneshot::channel();
+
 
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up setup thread");
@@ -93,11 +100,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         exit(0)
     }));
 
+
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up periodic fix_fingers thread");
         fix_fingers_periodically(cloned_grpc_addr_4)
             .await
     }));
+
 
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up periodic stabilization thread");
@@ -105,11 +114,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
     }));
 
+
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up periodic predecessor health check thread");
         check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor)
             .await
     }));
+
 
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up periodic successor list check thread");
@@ -117,13 +128,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
     }));
 
+
     for handle in thread_handles {
         handle.await?;
     }
 
     Ok(())
 }
-
-
-
-
