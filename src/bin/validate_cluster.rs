@@ -5,7 +5,7 @@ use tonic::Request;
 use tonic::transport::Channel;
 
 use chord::utils;
-use chord::utils::crypto::HashPos;
+use chord::utils::types::HashPos;
 use utils::crypto;
 
 use crate::chord_proto::{Empty, NodeSummaryMsg, SuccessorListMsg};
@@ -22,7 +22,7 @@ async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
         let node_ports = [
-            // 5601,
+            5601,
             // 5602,
             // 5603,
             // 5604,

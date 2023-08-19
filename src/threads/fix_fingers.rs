@@ -3,7 +3,6 @@ use std::time::Duration;
 use log::debug;
 use tokio::time::sleep;
 use tonic::Request;
-use crate::threads::chord::Address;
 
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::threads::chord::chord_proto::Empty;

@@ -1,8 +1,6 @@
 use std::fmt::Debug;
 use std::fmt;
-
-use crate::threads::chord::Address;
-use crate::utils::crypto::HashPos;
+use crate::utils::types::{Address, HashPos};
 
 
 #[derive(Clone, Default)]

@@ -1,30 +1,28 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 use log::info;
 use tokio::sync::oneshot::Sender;
 use tonic::Request;
-use chord::utils::crypto::Key;
 
-use crate::kv::kv_store::Value;
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
-use crate::threads::chord::{Address, connect_with_retry};
 use crate::threads::chord::chord_proto::{Empty, HashPosMsg};
+use crate::threads::chord::connect_with_retry;
 use crate::utils::crypto::hash;
+use crate::utils::types::{Address, KvStore};
 
 pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String,
-                               tx_grpc_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>,
-                               tx_handoff_thread: Sender<Arc<Mutex<HashMap<Key, Value>>>>,
+                               tx_grpc_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>,
+                               tx_handoff_thread: Sender<Arc<Mutex<KvStore>>>,
                                tx_check_predecessor: Sender<Arc<Mutex<Option<FingerEntry>>>>,
                                tx_successor_list: Sender<Arc<Mutex<SuccessorList>>>,
 ) -> Result<(), Box<dyn Error>> {
     let own_id = hash(own_grpc_address_str.as_bytes());
 
     let finger_table_arc = Arc::new(Mutex::new(FingerTable::new(&own_id)));
-    let kv_store_arc = Arc::new(Mutex::new(HashMap::new()));
+    let kv_store_arc = Arc::new(Mutex::new(KvStore::new()));
     let predecessor_option_arc = Arc::new(Mutex::new(None));
     let mut successor_list_arc = Arc::new(Mutex::new(SuccessorList::default()));
 

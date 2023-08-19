@@ -57,7 +57,7 @@ def send_put(s, dht_key, dht_value):
     putreq = struct.pack(">HHHBB",
                          (4+4+int(256/8)+len(dht_value)),
                          DHT_PUT,
-                         1,
+                         0,
                          1,
                          0)
     putreq += dht_key
@@ -127,7 +127,7 @@ def main():
 
         if args.set:
             success = send_put(s, key, value)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             if HOST_DISCONNECTS or not success:
                 s.close()

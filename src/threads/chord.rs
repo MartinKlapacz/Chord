@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
@@ -12,28 +11,28 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tonic::transport::Channel;
 
-use chord::utils::crypto::Key;
+use chord::utils::types::{Address, HashPos, Key, KvStore};
 
-use crate::kv::kv_store::{KVStore, Value};
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
-use crate::utils::crypto::{hash, HashPos, HashRingKey, is_between};
+use crate::utils::crypto::{hash, HashRingKey, is_between};
+use crate::utils::types::ExpirationDate;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
 }
 
-pub type Address = String;
+
 
 pub struct ChordService {
     address: String,
     pos: HashPos,
     finger_table: Arc<Mutex<FingerTable>>,
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
-    kv_store: Arc<Mutex<HashMap<Key, Value>>>,
+    kv_store: Arc<Mutex<KvStore>>,
     fix_finger_index: Arc<Mutex<usize>>,
     successor_list: Arc<Mutex<SuccessorList>>,
 }
@@ -70,9 +69,18 @@ pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>)
     None
 }
 
+fn now() -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+}
+
+fn has_expired(expiration_date: &u64) -> bool {
+    now().as_secs() > expiration_date.clone()
+}
+
+
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
         let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
@@ -243,7 +251,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                 .filter(move |(key, _)| is_between(hash(*key), one + 1, one, false, false))
                 .map(|(key, value)| KvPairDebugMsg {
                     key: key.map(|b| b.to_string()).join(" "),
-                    value: value.clone(),
+                    value: value.0.clone(),
                 }).collect()
         };
         Ok(Response::new(GetKvStoreDataResponse { kv_pairs }))
@@ -251,34 +259,49 @@ impl chord_proto::chord_server::Chord for ChordService {
 
 
     async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
-        // let key: Key = request.into_inner().key.try_into().unwrap();
-        // let predecessor_address = {
-        //     self.predecessor_option.lock().unwrap().get_address().clone()
-        // };
-        // let predecessor_key = hash(predecessor_address.as_bytes());
-        // if is_between(hash(&key), predecessor_key, self.pos, true, false) || predecessor_key == self.pos {
-        //     match self.kv_store.lock().unwrap().get(&key) {
-        //         Some(value) => {
-        //             // info!("Get request for key {}, value = {}", key, value);
-        //             Ok(Response::new(GetResponse {
-        //                 value: value.clone(),
-        //                 status: GetStatus::Ok.into(),
-        //             }))
-        //         }
-        //         None => {
-        //             Ok(Response::new(GetResponse {
-        //                 value: String::default(),
-        //                 status: GetStatus::NotFound.into(),
-        //             }))
-        //         }
-        //     }
-        // } else {
-        //     // error!("Invalid key {}!", key);
-        //     error!("This node is responsible for interval ({}, {}] !", predecessor_key, self.pos);
-        //     let msg = format!("Node ({}, {}) is responsible for range ({}, {})", self.address, self.pos, predecessor_address, predecessor_key);
-        //     Err(Status::internal(msg))
-        // }
-        Err(Status::internal(""))
+        let key: Key = request.into_inner().key.try_into().unwrap();
+        let predecessor_pos = {
+            if let Some(finger_entry) = self.predecessor_option.lock().unwrap().clone() {
+                hash(finger_entry.address.as_bytes())
+            } else {
+                return Err(Status::internal("Predecessor not set"))
+            }
+        };
+        if is_between(hash(&key), predecessor_pos + 1, self.pos, false, false) {
+            let mut kv_store_guard = self.kv_store.lock().unwrap();
+
+            match kv_store_guard.get(&key).cloned() {
+                Some((value, expiration_date)) => {
+                    if has_expired(&expiration_date) {
+                        let since = now().as_secs() - expiration_date;
+                        info!("Received GET request for key {:?}, but value is expired since {} seconds!", key, since);
+                        kv_store_guard.remove(&key);
+                        info!("Removed expired key {:?}", &key);
+                        return Ok(Response::new(GetResponse {
+                            value: value.clone(),
+                            status: GetStatus::Expired.into(),
+                        }))
+                    } else {
+                        info!("Received GET request for key {:?}, value is: {}", key, value);
+                        return Ok(Response::new(GetResponse {
+                            value: value.clone(),
+                            status: GetStatus::Ok.into(),
+                        }))
+                    }
+                }
+                None => {
+                    warn!("Received GET request for key {:?}, but not found)", key);
+                    return Ok(Response::new(GetResponse {
+                        value: String::default(),
+                        status: GetStatus::NotFound.into(),
+                    }))
+                }
+            }
+        } else {
+            error!("This node is responsible for interval ({}, {}] !", predecessor_pos, self.pos);
+            let msg = format!("Node ({}, {}) is responsible for range ({}, {}]", self.address, self.pos, predecessor_pos, self.pos);
+            return Err(Status::internal(msg))
+        };
     }
 
     async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
@@ -287,11 +310,11 @@ impl chord_proto::chord_server::Chord for ChordService {
         let replication = request.get_ref().replication;
         let value = &request.get_ref().value;
 
-        // todo: handle ttl
         // todo: handle replication
 
-        let is_update = self.kv_store.lock().unwrap().insert(key, value.clone());
-        // info!("Received PUT request ({}, {}) with ttl {} and replication {}", key, value, ttl, replication);
+        let expiration_date = now().as_secs() + ttl;
+        let is_update = self.kv_store.lock().unwrap().insert(key, (value.clone(), expiration_date));
+        info!("Received PUT request ({:?}, {}) with ttl {} and replication {}", hash(&key), value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
 
@@ -343,7 +366,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             .unwrap().into_inner();
         while let Some(pair) = data_handoff_stream.message().await.unwrap() {
             let key: Key = pair.key.try_into().unwrap();
-            self.kv_store.lock().unwrap().insert(key, pair.value);
+            self.kv_store.lock().unwrap().insert(key, (pair.value, pair.expiration_date));
         }
 
         Ok(Response::new(Empty {}))
@@ -391,16 +414,17 @@ impl chord_proto::chord_server::Chord for ChordService {
                 let kv_store_lock_result = kv_store_arc.lock();
                 let mut kv_store_lock = kv_store_lock_result.unwrap();
 
-                let pairs_to_handoff: Vec<(Vec<u8>, String)> = kv_store_lock
+                let pairs_to_handoff: Vec<(Vec<u8>, String, ExpirationDate)> = kv_store_lock
                     .iter()
                     .filter(|(key, _)| is_between(hash(*key), lower, upper, false, false))
-                    .map(|(key, value)| (key.to_vec(), value.clone()))
+                    .map(|(key, (value, ttl))| (key.to_vec(), value.clone(), ttl.clone()))
                     .collect();
 
-                for (key, value) in pairs_to_handoff.iter() {
+                for (key, value, expiration_date) in pairs_to_handoff.iter() {
                     let pair = KvPairMsg {
                         key: key.to_vec(),
                         value: value.clone(),
+                        expiration_date: expiration_date.clone()
                     };
                     debug!("Handing over KV pair ({:?}, {})", key, value);
                     match tx.send(Ok(pair)) {
@@ -427,7 +451,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         info!("Receiving handoff data from predecessor!");
         while let Some(kv_msg) = stream.message().await? {
             let key: Key = kv_msg.key.try_into().unwrap();
-            self.kv_store.lock().unwrap().insert(key, kv_msg.value);
+            self.kv_store.lock().unwrap().insert(key, (kv_msg.value, kv_msg.expiration_date));
             debug!("Received kv-pair!");
             counter += 1;
         };

@@ -1,9 +1,7 @@
 use std::mem::size_of;
 
 use blake3::Hasher;
-
-pub type HashPos = u8;
-pub type Key = [u8; 32];
+use crate::utils::types::HashPos;
 
 
 pub trait HashRingKey {

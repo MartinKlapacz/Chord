@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
-use crate::threads::chord::Address;
 use crate::threads::chord::chord_proto::FingerTableMsg;
-use crate::utils::crypto::{HashRingKey, HashPos};
+use crate::utils::crypto::{HashRingKey};
 use crate::node::finger_entry::FingerEntry;
+use crate::utils::types::{Address, HashPos};
 
 #[derive(Debug, Clone)]
 pub struct FingerTable {
