@@ -61,6 +61,15 @@ pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<
     }
 }
 
+pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>) -> Option<(ChordClient<Channel>, Address)> {
+    for address in address_list {
+        if let Ok(successor_client) = connect_with_retry(address).await {
+            return Some((successor_client, address.clone()))
+        }
+    };
+    None
+}
+
 
 impl ChordService {
     pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<HashMap<Key, Value>>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
@@ -90,13 +99,11 @@ impl ChordService {
         let successors = {
             self.successor_list.lock().unwrap().successors.clone()
         };
-        for ref successor_address in successors {
-            match connect_with_retry(successor_address).await {
-                Ok(successor_client) => return (successor_client, successor_address.clone()),
-                Err(_) => {}
-            }
-        };
-        panic!();
+        if let Some(client_and_address) = connect_to_first_reachable_node(&successors).await {
+            return client_and_address
+        } else {
+            panic!("All successor in successor list are unreachable")
+        }
     }
 
     pub async fn get_predecessor_client(&self) -> Option<ChordClient<Channel>> {
@@ -432,3 +439,4 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 }
+
