@@ -13,7 +13,7 @@ use crate::threads::chord::connect_with_retry;
 use crate::utils::crypto::hash;
 use crate::utils::types::{Address, KvStore};
 
-pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_address_str: &String,
+pub async fn process_node_join(join_address_option: Option<Address>, own_grpc_address_str: &String,
                                tx_grpc_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>,
                                tx_handoff_thread: Sender<Arc<Mutex<KvStore>>>,
                                tx_check_predecessor: Sender<Arc<Mutex<Option<FingerEntry>>>>,
@@ -26,7 +26,7 @@ pub async fn process_node_join(peer_address_option: Option<Address>, own_grpc_ad
     let predecessor_option_arc = Arc::new(Mutex::new(None));
     let mut successor_list_arc = Arc::new(Mutex::new(SuccessorList::default()));
 
-    match peer_address_option {
+    match join_address_option {
         Some(peer_address_str) => {
             info!("Joining existing cluster");
             let mut join_peer_client = connect_with_retry(&peer_address_str)

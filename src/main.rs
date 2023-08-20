@@ -16,9 +16,9 @@ use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
 use crate::threads::tcp_service::handle_client_connection;
-use crate::utils::cli::Cli;
 
 use tonic::transport::Identity;
+use chord::utils::config::Config;
 
 mod node;
 mod utils;
@@ -38,20 +38,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init()
         .unwrap();
 
-    let args = Cli::parse();
-    let tcp_addr = args.tcp_address;
+    let config = Config::load().unwrap();
+
+    let api_address = config.api_address;
+    let p2p_address = config.p2p_address;
+    let join_address_option = config.join_address;
 
     let mut thread_handles = Vec::new();
 
-    let peer_address_option = args.peer;
-    let cloned_grpc_addr_1 = args.grpc_address.clone();
-    let cloned_grpc_addr_2 = args.grpc_address.clone();
-    let cloned_grpc_addr_3 = args.grpc_address.clone();
-    let cloned_grpc_addr_4 = args.grpc_address.clone();
-    let cloned_grpc_addr_5 = args.grpc_address.clone();
-    let cloned_grpc_addr_6 = args.grpc_address.clone();
-    let cloned_grpc_addr_7 = args.grpc_address.clone();
-    let own_grpc_address_8 = args.grpc_address.clone();
+    let cloned_grpc_addr_1 = p2p_address.clone();
+    let cloned_grpc_addr_2 = p2p_address.clone();
+    let cloned_grpc_addr_3 = p2p_address.clone();
+    let cloned_grpc_addr_4 = p2p_address.clone();
+    let cloned_grpc_addr_5 = p2p_address.clone();
+    let cloned_grpc_addr_6 = p2p_address.clone();
+    let cloned_grpc_addr_7 = p2p_address.clone();
+    let own_grpc_address_8 = p2p_address.clone();
 
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
@@ -61,15 +63,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up setup thread");
-        process_node_join(peer_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
+        process_node_join(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
             .await
             .unwrap();
     }));
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up tcp main thread on {}", tcp_addr);
-        let listener = TcpListener::bind(tcp_addr).await.unwrap();
+        info!("Starting up tcp main thread on {}", api_address);
+        let listener = TcpListener::bind(api_address).await.unwrap();
         loop {
             let grpc_address = cloned_grpc_addr_3.clone();
             let (socket, _) = listener.accept().await.unwrap();
@@ -79,6 +81,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     thread_handles.push(tokio::spawn(async move {
+        let cert = std::fs::read_to_string("certs/node1.crt").unwrap();
+        let key = std::fs::read_to_string("certs/node1.key").unwrap();
+
         let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2).await);
         info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
 
@@ -87,7 +92,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .build()
             .unwrap();
 
+        let identity = Identity::from_pem(cert, key);
+
         Server::builder()
+            // .tls_config(ServerTlsConfig::new().identity(identity))
+            // .unwrap()
             .add_service(chord_service)
             .add_service(reflection_service)
             .serve(cloned_grpc_addr_2.parse().unwrap())
