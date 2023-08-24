@@ -81,8 +81,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     thread_handles.push(tokio::spawn(async move {
-        let cert = std::fs::read_to_string("certs/node1.crt").unwrap();
-        let key = std::fs::read_to_string("certs/node1.key").unwrap();
+        // let cert_result = std::fs::read_to_string("certs/node1.crt");
+        // let key_result = std::fs::read_to_string("certs/node1.key");
+
 
         let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2).await);
         info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
@@ -92,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .build()
             .unwrap();
 
-        let identity = Identity::from_pem(cert, key);
+        // let identity = Identity::from_pem(cert, key);
 
         Server::builder()
             // .tls_config(ServerTlsConfig::new().identity(identity))
