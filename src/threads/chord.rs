@@ -230,9 +230,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         Ok(Response::new(NodeSummaryMsg {
             url: self.address.clone(),
-            pos: self.pos.to_be_bytes().iter()
-                .map(|byte| byte.to_string())
-                .collect::<Vec<String>>().join(" "),
+            pos: Some(self.pos.into()),
             predecessor: match predecessor_option.clone() {
                 Some(predecessor) => Some(predecessor.into()),
                 None => None

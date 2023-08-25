@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub type HashPos = u8;
+pub type HashPos = u128;
 
 pub type ExpirationDate = u64;
 
