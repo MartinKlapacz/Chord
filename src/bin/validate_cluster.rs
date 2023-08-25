@@ -8,7 +8,7 @@ use chord::utils;
 use chord::utils::types::HashPos;
 use utils::crypto;
 
-use crate::chord_proto::{Empty, NodeSummaryMsg, SuccessorListMsg};
+use crate::chord_proto::{Empty, NodeSummaryMsg, SuccessorListMsg, HashPosMsg};
 use crate::chord_proto::chord_client::ChordClient;
 
 pub mod chord_proto {
@@ -25,10 +25,10 @@ async fn main() {
             5601,
             5602,
             5603,
-            5604,
-            5605,
-            5606,
-            5607,
+            // 5604,
+            // 5605,
+            // 5606,
+            // 5607,
             // 5611,
         ];
         // sleep(Duration::from_secs(20)).await;
@@ -46,19 +46,30 @@ async fn main() {
     }
 
     node_summaries.sort_by(|a: &NodeSummaryMsg, b: &NodeSummaryMsg| {
-        a.pos.parse::<HashPos>().unwrap().cmp(&b.pos.parse::<HashPos>().unwrap())
+        // let bytes_a: [u8; std::mem::size_of::<HashPos>()] = a.pos.unwrap().key.try_into().unwrap();
+        // let bytes_b: [u8; std::mem::size_of::<HashPos>()] = b.pos.unwrap().key.try_into().unwrap();
+        // let pos_a: HashPos = a.pos.unwrap().into();
+        // let pos_b: HashPos = b.pos.unwrap().into();
+        //
+        // pos_a.cmp(&pos_b)
+        // HashPos::from_be_bytes(bytes_a).cmp(&HashPos::from_be_bytes(bytes_b))
+        foo(a.pos.clone().unwrap()).cmp(&foo(b.pos.clone().unwrap()))
     });
 
     let node_ids: Vec<HashPos> = node_summaries.iter()
-        .map(|node_summary: &NodeSummaryMsg| node_summary.pos.parse::<HashPos>().unwrap())
+        .map(|node_summary: &NodeSummaryMsg| {
+            // let bytes_b: [u8; std::mem::size_of::<HashPos>()] = node_summary.pos.unwrap().key.try_into().unwrap();
+            // HashPos::from_be_bytes(bytes_b)
+            foo(node_summary.pos.clone().unwrap())
+        })
         .collect::<Vec<HashPos>>();
 
     // check predecessors
     for i in 0..node_summaries.len() {
-        let current_node: String = node_summaries[i].pos.clone();
-        let next_node_pred: String = node_summaries[(i + 1) % node_summaries.len()].predecessor.clone().unwrap().id;
+        let current_node: &String = &node_summaries[i].url;
+        let next_node_pred: &String = &node_summaries[(i + 1) % node_summaries.len()].predecessor.clone().unwrap().address;
 
-        if current_node.ne(&next_node_pred) {
+        if current_node.ne(next_node_pred) {
             panic!("Node {} has wrong predecessor: {}", current_node, next_node_pred)
         }
     }
@@ -77,7 +88,7 @@ async fn main() {
                     eprintln!("-----");
                     is_valid = false;
                 }
-                eprintln!("Node ({}, {}): Wrong finger entry! ", node_summaries[i].pos, node_summaries[i].url);
+                eprintln!("Node ({}, {}): Wrong finger entry! ", foo(node_summaries[i].pos.clone().unwrap()), node_summaries[i].url);
                 eprintln!("{}-th Finger {} points to node ({}, {}) ", j, finger_key, node_key_pointed_to, &finger.address);
                 eprintln!("But node ({}, {}) is responsible for {}", actually_responsible_node_key, actually_responsible_node_address, finger_key);
                 eprintln!("-----");
@@ -92,7 +103,7 @@ async fn main() {
             let actual_successor_address = &node_summaries[(i + j + 1) % node_summaries.len()].url;
             if successor_according_to_list.address.ne(actual_successor_address) {
                 eprintln!("-----");
-                eprintln!("Node ({}, {}): Wrong successor list! ", node_summaries[i].pos, node_summaries[i].url);
+                eprintln!("Node ({}, {}): Wrong successor list! ", foo(node_summaries[i].pos.clone().unwrap()), node_summaries[i].url);
                 eprintln!("Actual successor address: {}, but was {}", actual_successor_address, successor_according_to_list.address);
                 eprintln!("-----");
                 is_valid = false;
@@ -117,7 +128,7 @@ fn get_responsible_node_for_key(key: HashPos, other_nodes: &Vec<HashPos>) -> Has
 
 fn get_node_address_for_key(key: &HashPos, node_summaries: &Vec<NodeSummaryMsg>) -> String {
     node_summaries.iter()
-        .find(|node_summary| node_summary.pos.parse::<HashPos>().unwrap().eq(key))
+        .find(|node_summary| foo(node_summary.pos.clone().unwrap()).eq(key))
         .unwrap()
         .url
         .clone()
@@ -181,4 +192,9 @@ fn get_base_node_start_up_command(tcp_node_port: u16, grpc_node_port: u16, peer_
         }
     }
         .expect("failed to start process")
+}
+
+fn foo(pos_msg: HashPosMsg) -> HashPos {
+    let bytes_b: [u8; std::mem::size_of::<HashPos>()] = pos_msg.key.try_into().unwrap();
+    HashPos::from_be_bytes(bytes_b)
 }
