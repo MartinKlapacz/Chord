@@ -1,10 +1,15 @@
 use std::fmt;
-use crate::utils::constants::POW_TOKEN_LIVE_TIME;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use crate::utils::constants::{POW_THREAD_NUM, POW_TOKEN_LIVE_TIME};
 use crate::utils::time::{has_expired, now};
-use crate::utils::constants::DIFFICULTY;
+use crate::utils::constants::POW_DIFFICULTY;
 use crate::utils::crypto::hash;
 
-#[derive(Default)]
+extern crate rayon;
+use rayon::prelude::*;
+
+#[derive(Default, Clone)]
 struct PowToken {
     timestamp: u64,
     nonce: u64
@@ -27,7 +32,7 @@ impl PowToken {
     }
 
     fn check_trailing_zeros(&self) -> bool {
-        hash(self.serialize().as_slice()).to_be_bytes().iter().take(DIFFICULTY).all(|&x| x == 0)
+        hash(self.serialize().as_slice()).to_be_bytes().iter().take(POW_DIFFICULTY).all(|&x| x == 0)
     }
 
     fn has_expired(&self, ) -> bool {
@@ -40,18 +45,37 @@ impl PowToken {
     }
 
     pub fn new() -> Self {
-        let mut token =  PowToken {
-            timestamp: now().as_secs(),
-            nonce: 0,
-        };
-        while !token.check_trailing_zeros() {
-            token.nonce = token.nonce.overflowing_add(1).0;
-            if token.has_expired() {
+        let timestamp = now().as_secs();
+        let token = Arc::new(Mutex::new(PowToken { timestamp, nonce: 0 }));
+        let found = Arc::new(AtomicBool::new(false));
 
-                token = PowToken::new()
+        rayon::scope(|s| {
+            for i in 0..POW_THREAD_NUM {
+                let token_clone = Arc::clone(&token);
+                let found_clone = Arc::clone(&found);
+
+                s.spawn(move |_| {
+                    let mut local_token = PowToken { timestamp, nonce: i as u64 };
+
+                    while !found_clone.load(Ordering::Relaxed) {
+                        if local_token.check_trailing_zeros() {
+                            let mut shared_token = token_clone.lock().unwrap();
+                            *shared_token = local_token.clone();
+                            found_clone.store(true, Ordering::Relaxed);
+                            break;
+                        }
+                        local_token.nonce += POW_THREAD_NUM as u64;
+
+                        if local_token.has_expired() {
+                            break;
+                        }
+                    }
+                });
             }
-        }
-        token
+        });
+
+        let final_token = token.lock().unwrap();
+        final_token.clone()
     }
 }
 
@@ -63,7 +87,8 @@ mod tests {
     #[test]
     fn test() {
         let token = PowToken::new();
-        token.validate();
+        println!("{}", token);
+        assert!(token.validate())
     }
 }
 
