@@ -1,7 +1,8 @@
 use crate::node::finger_entry::FingerEntry;
 use crate::node::successor_list::SuccessorList;
-use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, HashPosMsg, SuccessorListMsg};
+use crate::threads::chord::chord_proto::{AddressMsg, FingerEntryDebugMsg, FingerEntryMsg, HashPosMsg, PowTokenMsg, SuccessorListMsg};
 use crate::utils::crypto;
+use crate::utils::proof_of_work::PowToken;
 use crate::utils::types::{Address, HashPos};
 
 impl Into<FingerEntryMsg> for AddressMsg {
@@ -226,6 +227,24 @@ impl Into<SuccessorList> for SuccessorListMsg {
         SuccessorList {
             own_address: self.own_address.unwrap().into(),
             successors: self.successors.iter().map(|succ| succ.into()).collect(),
+        }
+    }
+}
+
+impl Into<PowTokenMsg> for PowToken {
+    fn into(self) -> PowTokenMsg {
+        PowTokenMsg {
+            timestamp: self.timestamp,
+            nonce: self.nonce,
+        }
+    }
+}
+
+impl Into<PowToken> for PowTokenMsg {
+    fn into(self) -> PowToken {
+        PowToken {
+            timestamp: self.timestamp,
+            nonce: self.nonce,
         }
     }
 }

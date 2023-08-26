@@ -1,6 +1,6 @@
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
@@ -16,15 +16,16 @@ use chord::utils::types::{Address, HashPos, Key, KvStore};
 use crate::node::finger_entry::FingerEntry;
 use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
-use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
+use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, NotifyRequest, PowTokenMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashRingKey, is_between};
+use crate::utils::proof_of_work::PowToken;
+use crate::utils::time::{has_expired, now};
 use crate::utils::types::ExpirationDate;
 
 pub mod chord_proto {
     tonic::include_proto!("chord");
 }
-
 
 
 pub struct ChordService {
@@ -71,20 +72,11 @@ pub(crate) async fn connect_with_retry(address: &Address) -> Result<ChordClient<
 pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>) -> Option<(ChordClient<Channel>, Address)> {
     for address in address_list {
         if let Ok(successor_client) = connect_with_retry(address).await {
-            return Some((successor_client, address.clone()))
+            return Some((successor_client, address.clone()));
         }
     };
     None
 }
-
-fn now() -> Duration {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
-}
-
-fn has_expired(expiration_date: &u64) -> bool {
-    now().as_secs() > expiration_date.clone()
-}
-
 
 
 impl ChordService {
@@ -116,7 +108,7 @@ impl ChordService {
             self.successor_list.lock().unwrap().successors.clone()
         };
         if let Some(client_and_address) = connect_to_first_reachable_node(&successors).await {
-            return client_and_address
+            return client_and_address;
         } else {
             panic!("All successor in successor list are unreachable")
         }
@@ -270,7 +262,7 @@ impl chord_proto::chord_server::Chord for ChordService {
             if let Some(finger_entry) = self.predecessor_option.lock().unwrap().clone() {
                 hash(finger_entry.address.as_bytes())
             } else {
-                return Err(Status::internal("Predecessor not set"))
+                return Err(Status::internal("Predecessor not set"));
             }
         };
         if is_between(hash(&key), predecessor_pos + 1, self.pos, false, false) {
@@ -286,13 +278,13 @@ impl chord_proto::chord_server::Chord for ChordService {
                         return Ok(Response::new(GetResponse {
                             value: value.clone(),
                             status: GetStatus::Expired.into(),
-                        }))
+                        }));
                     } else {
                         info!("Received GET request for key {:?}, value is: {}", key, value);
                         return Ok(Response::new(GetResponse {
                             value: value.clone(),
                             status: GetStatus::Ok.into(),
-                        }))
+                        }));
                     }
                 }
                 None => {
@@ -300,13 +292,13 @@ impl chord_proto::chord_server::Chord for ChordService {
                     return Ok(Response::new(GetResponse {
                         value: String::default(),
                         status: GetStatus::NotFound.into(),
-                    }))
+                    }));
                 }
             }
         } else {
             error!("This node is responsible for interval ({}, {}] !", predecessor_pos, self.pos);
             let msg = format!("Node ({}, {}) is responsible for range ({}, {}]", self.address, self.pos, predecessor_pos, self.pos);
-            return Err(Status::internal(msg))
+            return Err(Status::internal(msg));
         };
     }
 
@@ -366,7 +358,12 @@ impl chord_proto::chord_server::Chord for ChordService {
         let mut successor_client: ChordClient<Channel> = connect_without_retry(&self.get_successor_address().await)
             .await;
 
-        let mut data_handoff_stream = successor_client.notify(Request::new(self.address.clone().into()))
+        let notify_request: NotifyRequest = NotifyRequest {
+            address: Some(self.address.clone().into()),
+            pow_token: Some(PowToken::new().into()),
+        };
+
+        let mut data_handoff_stream = successor_client.notify(Request::new(notify_request))
             .await
             .unwrap().into_inner();
         while let Some(pair) = data_handoff_stream.message().await.unwrap() {
@@ -380,10 +377,22 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     type NotifyStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
 
-    async fn notify(&self, request: Request<AddressMsg>) -> Result<Response<Self::NotifyStream>, Status> {
-        let (tx, rx) = mpsc::unbounded_channel();
+    async fn notify(&self, request: Request<NotifyRequest>) -> Result<Response<Self::NotifyStream>, Status> {
 
-        let caller_address: &Address = &request.into_inner().into();
+        let notify_request = request.into_inner();
+        let pow_token_msg: PowTokenMsg = notify_request.pow_token.unwrap();
+        let pow_token: PowToken = pow_token_msg.into();
+
+        let (has_expired, valid) = pow_token.validate();
+        if has_expired {
+            return Err(Status::cancelled("Pow token expired"))
+        }
+        if !valid {
+            return Err(Status::cancelled(format!("Invalid pow token: {}", pow_token)))
+        }
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        let caller_address: &Address = &notify_request.address.unwrap().into();
         let caller_pos = hash(caller_address.as_bytes());
 
         let mut predecessor_option_guard = self.predecessor_option.lock().unwrap();
@@ -429,7 +438,7 @@ impl chord_proto::chord_server::Chord for ChordService {
                     let pair = KvPairMsg {
                         key: key.to_vec(),
                         value: value.clone(),
-                        expiration_date: expiration_date.clone()
+                        expiration_date: expiration_date.clone(),
                     };
                     debug!("Handing over KV pair ({:?}, {})", key, value);
                     match tx.send(Ok(pair)) {
