@@ -19,6 +19,7 @@ use crate::node::successor_list::SuccessorList;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
 use crate::utils::crypto::{hash, HashRingKey, is_between};
+use crate::utils::time::{has_expired, now};
 use crate::utils::types::ExpirationDate;
 
 pub mod chord_proto {
@@ -75,14 +76,6 @@ pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>)
         }
     };
     None
-}
-
-fn now() -> Duration {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
-}
-
-fn has_expired(expiration_date: &u64) -> bool {
-    now().as_secs() > expiration_date.clone()
 }
 
 
