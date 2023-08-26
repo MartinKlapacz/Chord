@@ -360,7 +360,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let notify_request: NotifyRequest = NotifyRequest {
             address: Some(self.address.clone().into()),
-            pow_token: Some(PowToken::new().into()),
+            pow_token: Some(PowToken::generate().into()),
         };
 
         let mut data_handoff_stream = successor_client.notify(Request::new(notify_request))

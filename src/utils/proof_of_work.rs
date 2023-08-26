@@ -45,7 +45,7 @@ impl PowToken {
         (self.has_expired(), self.check_trailing_zeros())
     }
 
-    pub fn new() -> Self {
+    pub fn generate() -> Self {
         let timestamp = now().as_secs();
         let token = Arc::new(Mutex::new(PowToken { timestamp, nonce: 0 }));
         let found = Arc::new(AtomicBool::new(false));
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let token = PowToken::new();
+        let token = PowToken::generate();
         println!("{}", token);
     }
 }
