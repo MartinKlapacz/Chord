@@ -90,6 +90,16 @@ message SuccessorListMsg {
   repeated AddressMsg successors = 2;
 }
 
+message PowTokenMsg {
+  uint64 timestamp = 1;
+  uint64 nonce = 2;
+}
+
+message NotifyRequest {
+    AddressMsg address = 1;
+    PowTokenMsg powToken = 2;
+}
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
@@ -109,7 +119,7 @@ service Chord {
   // stabilization
   rpc FixFingers(Empty) returns (Empty);
   rpc Stabilize(Empty) returns (Empty);
-  rpc Notify(AddressMsg) returns (stream KvPairMsg);
+  rpc Notify(NotifyRequest) returns (stream KvPairMsg);
 
   rpc handoff(stream KvPairMsg) returns (Empty);
 

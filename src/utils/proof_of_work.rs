@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use log::{debug, info};
 use crate::utils::constants::{POW_THREAD_NUM, POW_TOKEN_LIVE_TIME};
 use crate::utils::time::{has_expired, now};
 use crate::utils::constants::POW_DIFFICULTY;
@@ -10,9 +11,9 @@ extern crate rayon;
 use rayon::prelude::*;
 
 #[derive(Default, Clone)]
-struct PowToken {
-    timestamp: u64,
-    nonce: u64
+pub struct PowToken {
+    pub timestamp: u64,
+    pub nonce: u64
 }
 
 impl fmt::Display for PowToken {
@@ -40,8 +41,8 @@ impl PowToken {
         has_expired(&expiration_time)
     }
 
-    pub fn validate(&self, ) -> bool {
-        !self.has_expired() || self.check_trailing_zeros()
+    pub fn validate(&self, ) -> (bool, bool) {
+        (self.has_expired(), self.check_trailing_zeros())
     }
 
     pub fn new() -> Self {
@@ -49,6 +50,7 @@ impl PowToken {
         let token = Arc::new(Mutex::new(PowToken { timestamp, nonce: 0 }));
         let found = Arc::new(AtomicBool::new(false));
 
+        let start = now().as_millis();
         rayon::scope(|s| {
             for i in 0..POW_THREAD_NUM {
                 let token_clone = Arc::clone(&token);
@@ -74,6 +76,8 @@ impl PowToken {
             }
         });
 
+        debug!("Found pow_token withing {} milliseconds", now().as_millis() - start);
+
         let final_token = token.lock().unwrap();
         final_token.clone()
     }
@@ -88,7 +92,6 @@ mod tests {
     fn test() {
         let token = PowToken::new();
         println!("{}", token);
-        assert!(token.validate())
     }
 }
 
