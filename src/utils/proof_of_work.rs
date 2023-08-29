@@ -1,14 +1,13 @@
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use log::{debug, info};
+use log::debug;
 use crate::utils::constants::{POW_THREAD_NUM, POW_TOKEN_LIVE_TIME};
 use crate::utils::time::{has_expired, now};
 use crate::utils::constants::POW_DIFFICULTY;
 use crate::utils::crypto::hash;
 
 extern crate rayon;
-use rayon::prelude::*;
 
 #[derive(Default, Clone)]
 pub struct PowToken {

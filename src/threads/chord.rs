@@ -6,7 +6,7 @@ use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::Stream;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tonic::transport::Channel;
@@ -311,7 +311,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         // todo: handle replication
 
         let expiration_date = now().as_secs() + ttl;
-        let is_update = self.kv_store.lock().unwrap().insert(key, (value.clone(), expiration_date));
+        let _ = self.kv_store.lock().unwrap().insert(key, (value.clone(), expiration_date));
         info!("Received PUT request ({:?}, {}) with ttl {} and replication {}", hash(&key), value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
@@ -473,7 +473,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
-    async fn health(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
+    async fn health(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
 }

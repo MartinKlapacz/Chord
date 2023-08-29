@@ -25,7 +25,7 @@ pub async fn check_predecessor_health_periodically(local_grpc_service_address: S
             match connect(&predecessor_address_msg.address).await {
                 Ok(mut predecessor_client) => {
                     match predecessor_client.health(Request::new(Empty {})).await {
-                        Ok(response) => debug!("predecessor node healthy"),
+                        Ok(_) => debug!("predecessor node healthy"),
                         Err(_) => unset_predecessor(predecessor_arc.clone()).await
                     }
                 }

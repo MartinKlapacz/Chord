@@ -1,11 +1,10 @@
 use std::error::Error;
-use std::process::{exit, id};
+use std::process::exit;
 
-use clap::Parser;
 use log::{info, LevelFilter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tonic::transport::{Server, ServerTlsConfig};
+use tonic::transport::{Server};
 
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::chord::ChordService;
@@ -17,12 +16,10 @@ use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
 use crate::threads::tcp_service::handle_client_connection;
 
-use tonic::transport::Identity;
 use chord::utils::config::Config;
 
 mod node;
 mod utils;
-mod kv;
 mod threads;
 
 

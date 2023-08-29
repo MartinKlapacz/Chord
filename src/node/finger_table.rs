@@ -22,19 +22,6 @@ impl FingerTable {
         FingerTable { fingers }
     }
 
-    pub fn set_finger(&mut self, index: usize, address: Address) -> () {
-        self.fingers[index].address = address;
-    }
-
-    pub fn set_all_fingers(&mut self, address: &Address) -> () {
-        for mut finger in &mut self.fingers {
-            finger.address = address.clone();
-        }
-    }
-
-    pub fn get_successor_address(&self) -> Address {
-        self.fingers[0].address.clone()
-    }
 }
 
 
