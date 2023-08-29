@@ -1,3 +1,4 @@
+use std::env;
 use log::info;
 use tokio::process::{Child, Command};
 use tokio::time::{Duration, sleep};
@@ -21,20 +22,13 @@ const DURATION: Duration = Duration::from_secs(20 as u64);
 async fn main() {
     let mut node_summaries: Vec<NodeSummaryMsg> = Vec::new();
     {
-        let node_ports = [
-            5601,
-            5602,
-            // 5603,
-            // 5604,
-            // 5605,
-            // 5606,
-            // 5607,
-            // 5608,
-            // 5611,
-        ];
-        // sleep(Duration::from_secs(20)).await;
-        for node_port in node_ports {
-            let mut client: ChordClient<Channel> = ChordClient::connect(format!("http://127.0.0.1:{}", node_port))
+        let mut args: Vec<String> = env::args().collect();
+        if args.len() == 1 {
+            panic!("Provide at least one node url")
+        }
+
+        for host in args.iter().skip(1) {
+            let mut client: ChordClient<Channel> = ChordClient::connect(host.clone())
                 .await
                 .unwrap();
             let summary: NodeSummaryMsg = client.get_node_summary(Request::new(Empty {}))
