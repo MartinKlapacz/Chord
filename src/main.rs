@@ -22,6 +22,7 @@ mod node;
 mod utils;
 mod threads;
 
+#[allow(warnings, unused, unused_imports, unused_import_braces, re)]
 
 pub mod chord_proto {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
@@ -29,13 +30,13 @@ pub mod chord_proto {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let config = Config::load().unwrap();
+
     simple_logger::SimpleLogger::new()
         .env()
-        .with_level(LevelFilter::Info)
+        .with_level(config.log_level_filter)
         .init()
         .unwrap();
-
-    let config = Config::load().unwrap();
 
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;

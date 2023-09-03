@@ -1,5 +1,7 @@
+use std::str::FromStr;
 use clap::Parser;
 use ini::{Error, Ini};
+use log::LevelFilter;
 use crate::utils::constants::POW_DIFFICULTY_DEFAULT;
 
 use crate::utils::types::Address;
@@ -18,6 +20,7 @@ pub struct Config {
     pub p2p_address: Address,
     pub join_address: Option<Address>,
     pub pow_difficulty: usize,
+    pub log_level_filter: LevelFilter
 }
 
 impl Config {
@@ -49,6 +52,12 @@ impl Config {
             .map(|pow_difficulty| pow_difficulty.parse::<usize>().unwrap())
             .unwrap_or(POW_DIFFICULTY_DEFAULT);
 
-        Ok(Config { p2p_address, api_address, join_address, pow_difficulty })
+        let log_level_filter = dht
+            .get("log_level")
+            .map(|log_level| LevelFilter::from_str(log_level))
+            .map(|log_level| log_level.expect("Invalid log level"))
+            .unwrap_or(LevelFilter::Info);
+
+        Ok(Config { p2p_address, api_address, join_address, pow_difficulty, log_level_filter })
     }
 }
