@@ -10,7 +10,7 @@ use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::chord::ChordService;
 use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::health::check_predecessor_health_periodically;
-use crate::threads::join::process_node_join;
+use crate::threads::setup::setup;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        process_node_join(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
+        setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
             .await
             .unwrap();
     }));
@@ -80,10 +80,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        // let cert_result = std::fs::read_to_string("certs/node1.crt");
-        // let key_result = std::fs::read_to_string("certs/node1.key");
-
-
         let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2, pow_difficulty).await);
         info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
 
@@ -91,12 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .register_encoded_file_descriptor_set(chord_proto::FILE_DESCRIPTOR_SET)
             .build()
             .unwrap();
-
-        // let identity = Identity::from_pem(cert, key);
-
         Server::builder()
-            // .tls_config(ServerTlsConfig::new().identity(identity))
-            // .unwrap()
             .add_service(chord_service)
             .add_service(reflection_service)
             .serve(cloned_grpc_addr_2.parse().unwrap())
