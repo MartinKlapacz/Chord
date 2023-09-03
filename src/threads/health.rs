@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::debug;
+use log::{debug, info};
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
 use tonic::Request;
@@ -14,6 +14,7 @@ use crate::threads::chord::{connect, connect_with_retry};
 
 pub async fn check_predecessor_health_periodically(local_grpc_service_address: String, rx: Receiver<Arc<Mutex<Option<FingerEntry>>>>) -> ! {
     let predecessor_arc = rx.await.unwrap();
+    info!("Starting up periodic predecessor health check thread");
     let mut local_grpc_client = connect_with_retry(&local_grpc_service_address.clone()).await.unwrap();
     debug!("Connected to local grpc service");
     loop {

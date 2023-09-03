@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use log::warn;
+use log::{info, warn};
 
 use tokio::sync::oneshot::Receiver;
 use tokio::time::sleep;
@@ -13,6 +13,7 @@ use crate::threads::chord::chord_proto::Empty;
 
 pub async fn check_successor_list_periodically(local_grpc_service_address: String, rx: Receiver<Arc<Mutex<SuccessorList>>>) -> ! {
     let successor_list_arc = rx.await.unwrap();
+    info!("Starting up periodic successor list check thread");
 
     let mut local_grpc_client = connect_with_retry(&local_grpc_service_address)
         .await

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::debug;
+use log::{debug, info};
 use tokio::time::sleep;
 use tonic::Request;
 
@@ -9,6 +9,7 @@ use crate::threads::chord::connect_with_retry;
 use crate::utils::constants::FIX_FINGERS_SLEEP_MILLIS;
 
 pub async fn fix_fingers_periodically(local_grpc_service_address: String) -> ! {
+    info!("Starting up periodic fix_fingers thread");
     let mut client = connect_with_retry(&local_grpc_service_address).await.unwrap();
     debug!("Successfully connected to local grpc service");
     loop {

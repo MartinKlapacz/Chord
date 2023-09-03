@@ -60,7 +60,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up setup thread");
         process_node_join(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
             .await
             .unwrap();
@@ -77,6 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             tokio::spawn(async move { handle_client_connection(socket, &grpc_address).await.unwrap() });
         }
     }));
+
 
     thread_handles.push(tokio::spawn(async move {
         // let cert_result = std::fs::read_to_string("certs/node1.crt");
@@ -103,6 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .unwrap();
     }));
 
+
     thread_handles.push(tokio::spawn(async move {
         shutdown_handoff(own_grpc_address_8.clone(), rx_shutdown_handoff).await.unwrap();
         exit(0)
@@ -110,28 +111,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up periodic fix_fingers thread");
         fix_fingers_periodically(cloned_grpc_addr_4)
             .await
     }));
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up periodic stabilization thread");
         stabilize_periodically(cloned_grpc_addr_5)
             .await
     }));
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up periodic predecessor health check thread");
         check_predecessor_health_periodically(cloned_grpc_addr_6, rx_check_predecessor)
             .await
     }));
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up periodic successor list check thread");
         check_successor_list_periodically(cloned_grpc_addr_7, rx_successor_list)
             .await
     }));

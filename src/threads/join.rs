@@ -19,6 +19,7 @@ pub async fn process_node_join(join_address_option: Option<Address>, own_grpc_ad
                                tx_check_predecessor: Sender<Arc<Mutex<Option<FingerEntry>>>>,
                                tx_successor_list: Sender<Arc<Mutex<SuccessorList>>>,
 ) -> Result<(), Box<dyn Error>> {
+    info!("Starting up setup thread");
     let own_id = hash(own_grpc_address_str.as_bytes());
 
     let finger_table_arc = Arc::new(Mutex::new(FingerTable::new(&own_id)));
