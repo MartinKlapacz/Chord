@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use log::debug;
 use crate::utils::constants::{POW_THREAD_NUM, POW_TOKEN_LIVE_TIME};
 use crate::utils::time::{has_expired, now};
-use crate::utils::constants::POW_DIFFICULTY;
 use crate::utils::crypto::hash;
 
 extern crate rayon;
@@ -12,7 +11,8 @@ extern crate rayon;
 #[derive(Default, Clone)]
 pub struct PowToken {
     pub timestamp: u64,
-    pub nonce: u64
+    pub nonce: u64,
+    pub(crate) pow_difficulty: usize
 }
 
 impl fmt::Display for PowToken {
@@ -32,7 +32,7 @@ impl PowToken {
     }
 
     fn check_trailing_zeros(&self) -> bool {
-        hash(self.serialize().as_slice()).to_be_bytes().iter().take(POW_DIFFICULTY).all(|&x| x == 0)
+        hash(self.serialize().as_slice()).to_be_bytes().iter().take(self.pow_difficulty).all(|&x| x == 0)
     }
 
     fn has_expired(&self, ) -> bool {
@@ -44,9 +44,9 @@ impl PowToken {
         (self.has_expired(), self.check_trailing_zeros())
     }
 
-    pub fn generate() -> Self {
+    pub fn generate(pow_difficulty: usize) -> Self {
         let timestamp = now().as_secs();
-        let token = Arc::new(Mutex::new(PowToken { timestamp, nonce: 0 }));
+        let token = Arc::new(Mutex::new(PowToken { timestamp, nonce: 0, pow_difficulty }));
         let found = Arc::new(AtomicBool::new(false));
 
         let start = now().as_millis();
@@ -56,7 +56,7 @@ impl PowToken {
                 let found_clone = Arc::clone(&found);
 
                 s.spawn(move |_| {
-                    let mut local_token = PowToken { timestamp, nonce: i as u64 };
+                    let mut local_token = PowToken { timestamp, nonce: i as u64, pow_difficulty };
 
                     while !found_clone.load(Ordering::Relaxed) {
                         if local_token.check_trailing_zeros() {
@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let token = PowToken::generate();
+        let token = PowToken::generate(2);
         println!("{}", token);
     }
 }

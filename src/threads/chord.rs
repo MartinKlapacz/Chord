@@ -36,6 +36,7 @@ pub struct ChordService {
     kv_store: Arc<Mutex<KvStore>>,
     fix_finger_index: Arc<Mutex<usize>>,
     successor_list: Arc<Mutex<SuccessorList>>,
+    pow_difficulty: usize
 }
 
 const MAX_RETRIES: u64 = 15;
@@ -80,7 +81,7 @@ pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>)
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String) -> ChordService {
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String, pow_difficulty: usize) -> ChordService {
         let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
@@ -90,6 +91,7 @@ impl ChordService {
             kv_store: kv_store_arc,
             fix_finger_index: Arc::new(Mutex::new(0)),
             successor_list: successor_list_arc,
+            pow_difficulty
         }
     }
 
@@ -360,7 +362,7 @@ impl chord_proto::chord_server::Chord for ChordService {
 
         let notify_request: NotifyRequest = NotifyRequest {
             address: Some(self.address.clone().into()),
-            pow_token: Some(PowToken::generate().into()),
+            pow_token: Some(PowToken::generate(self.pow_difficulty).into()),
         };
 
         let mut data_handoff_stream = successor_client.notify(Request::new(notify_request))

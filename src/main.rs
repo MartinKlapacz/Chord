@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;
     let join_address_option = config.join_address;
+    let pow_difficulty = config.pow_difficulty;
 
     let mut thread_handles = Vec::new();
 
@@ -82,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // let key_result = std::fs::read_to_string("certs/node1.key");
 
 
-        let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2).await);
+        let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2, pow_difficulty).await);
         info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
 
         let reflection_service = tonic_reflection::server::Builder::configure()

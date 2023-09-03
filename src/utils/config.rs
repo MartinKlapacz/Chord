@@ -1,5 +1,6 @@
 use clap::Parser;
 use ini::{Error, Ini};
+use crate::utils::constants::POW_DIFFICULTY_DEFAULT;
 
 use crate::utils::types::Address;
 
@@ -16,6 +17,7 @@ pub struct Config {
     pub api_address: Address,
     pub p2p_address: Address,
     pub join_address: Option<Address>,
+    pub pow_difficulty: usize,
 }
 
 impl Config {
@@ -42,6 +44,11 @@ impl Config {
             .get("join_address")
             .map(|join_address_str| join_address_str.to_string());
 
-        Ok(Config { p2p_address, api_address, join_address })
+        let pow_difficulty = dht
+            .get("pow_difficulty")
+            .map(|pow_difficulty| pow_difficulty.parse::<usize>().unwrap())
+            .unwrap_or(POW_DIFFICULTY_DEFAULT);
+
+        Ok(Config { p2p_address, api_address, join_address, pow_difficulty })
     }
 }

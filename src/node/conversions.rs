@@ -236,6 +236,7 @@ impl Into<PowTokenMsg> for PowToken {
         PowTokenMsg {
             timestamp: self.timestamp,
             nonce: self.nonce,
+            pow_difficulty: self.pow_difficulty as u32
         }
     }
 }
@@ -245,6 +246,7 @@ impl Into<PowToken> for PowTokenMsg {
         PowToken {
             timestamp: self.timestamp,
             nonce: self.nonce,
+            pow_difficulty: self.pow_difficulty as usize
         }
     }
 }

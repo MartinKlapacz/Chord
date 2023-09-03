@@ -93,6 +93,7 @@ message SuccessorListMsg {
 message PowTokenMsg {
   uint64 timestamp = 1;
   uint64 nonce = 2;
+  uint32 pow_difficulty = 3;
 }
 
 message NotifyRequest {
