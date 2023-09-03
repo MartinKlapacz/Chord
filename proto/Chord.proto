@@ -3,12 +3,10 @@ syntax = "proto3";
 package chord;
 
 // helper
-
 message Empty {
 }
 
 // chord protocol
-
 message AddressMsg {
   string address = 1;
 }
@@ -32,29 +30,6 @@ message KvPairMsg {
   uint64 expiration_date = 3;
 }
 
-message GetKvStoreDataResponse {
-  repeated KvPairDebugMsg kvPairs = 1;
-}
-
-// debugging
-
-message KvPairDebugMsg {
-  string key = 1;
-  string value = 2;
-}
-
-message FingerEntryDebugMsg {
-  string id = 1;
-  string address = 2;
-}
-
-message NodeSummaryMsg {
-  string url = 1;
-  HashPosMsg pos = 2;
-  FingerEntryDebugMsg predecessor = 3;
-  repeated FingerEntryDebugMsg fingerEntries = 4;
-  SuccessorListMsg successorList = 5;
-}
 
 // hashtable RPCs
 
@@ -101,29 +76,49 @@ message NotifyRequest {
     PowTokenMsg powToken = 2;
 }
 
+// debugging
+message KvPairDebugMsg {
+  string key = 1;
+  string value = 2;
+}
+
+message FingerEntryDebugMsg {
+  string id = 1;
+  string address = 2;
+}
+
+message NodeSummaryMsg {
+  string url = 1;
+  HashPosMsg pos = 2;
+  FingerEntryDebugMsg predecessor = 3;
+  repeated FingerEntryDebugMsg fingerEntries = 4;
+  SuccessorListMsg successorList = 5;
+}
+
+message GetKvStoreDataResponse {
+  repeated KvPairDebugMsg kvPairs = 1;
+}
+
+
 service Chord {
   // chord protocol
   rpc FindSuccessor (HashPosMsg) returns (AddressMsg);
   rpc GetPredecessor (Empty) returns (GetPredecessorResponse);
   rpc GetSuccessorList (Empty) returns (SuccessorListMsg);
   rpc FindClosestPrecedingFinger (HashPosMsg) returns (FingerEntryMsg);
+  // stabilization
+  rpc FixFingers(Empty) returns (Empty);
+  rpc Stabilize(Empty) returns (Empty);
+  rpc Notify(NotifyRequest) returns (stream KvPairMsg);
+  rpc Health(Empty) returns (Empty);
+  rpc Handoff(stream KvPairMsg) returns (Empty);
+
+  // hash table
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Put(PutRequest) returns (Empty);
 
   // debugging
   rpc GetNodeSummary (Empty) returns (NodeSummaryMsg);
   rpc GetKvStoreSize (Empty) returns (GetKvStoreSizeResponse);
   rpc GetKvStoreData (Empty) returns (GetKvStoreDataResponse);
-
-  // Hashtable RPCS
-  rpc Get(GetRequest) returns (GetResponse);
-  rpc Put(PutRequest) returns (Empty);
-
-  // stabilization
-  rpc FixFingers(Empty) returns (Empty);
-  rpc Stabilize(Empty) returns (Empty);
-  rpc Notify(NotifyRequest) returns (stream KvPairMsg);
-
-  rpc handoff(stream KvPairMsg) returns (Empty);
-
-  // security
-  rpc Health(Empty) returns (Empty);
 }
