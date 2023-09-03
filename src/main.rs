@@ -14,7 +14,7 @@ use crate::threads::join::process_node_join;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
-use crate::threads::tcp_service::handle_client_connection;
+use crate::threads::client_api::handle_client_connection;
 
 use chord::utils::config::Config;
 
