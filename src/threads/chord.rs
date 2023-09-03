@@ -366,8 +366,9 @@ impl chord_proto::chord_server::Chord for ChordService {
         };
 
         let mut data_handoff_stream = successor_client.notify(Request::new(notify_request))
-            .await
-            .unwrap().into_inner();
+            .await?
+            .into_inner();
+
         while let Some(pair) = data_handoff_stream.message().await.unwrap() {
             let key: Key = pair.key.try_into().unwrap();
             self.kv_store.lock().unwrap().insert(key, (pair.value, pair.expiration_date));
