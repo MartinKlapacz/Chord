@@ -18,6 +18,7 @@ use crate::node::finger_table::FingerTable;
 use crate::node::successor_list::SuccessorList;
 use crate::threads::chord::chord_proto::{AddressMsg, Empty, FingerEntryMsg, GetKvStoreDataResponse, GetKvStoreSizeResponse, GetPredecessorResponse, GetRequest, GetResponse, GetStatus, HashPosMsg, KvPairDebugMsg, KvPairMsg, NodeSummaryMsg, NotifyRequest, PowTokenMsg, PutRequest, SuccessorListMsg};
 use crate::threads::chord::chord_proto::chord_client::ChordClient;
+use crate::utils::constants::DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE;
 use crate::utils::crypto::{hash, HashRingKey, is_between};
 use crate::utils::proof_of_work::PowToken;
 use crate::utils::time::{has_expired, now};
@@ -36,7 +37,8 @@ pub struct ChordService {
     kv_store: Arc<Mutex<KvStore>>,
     fix_finger_index: Arc<Mutex<usize>>,
     successor_list: Arc<Mutex<SuccessorList>>,
-    pow_difficulty: usize
+    pow_difficulty: usize,
+    dev_mode: bool
 }
 
 const MAX_RETRIES: u64 = 15;
@@ -81,7 +83,7 @@ pub(crate) async fn connect_to_first_reachable_node(address_list: &Vec<Address>)
 
 
 impl ChordService {
-    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String, pow_difficulty: usize) -> ChordService {
+    pub async fn new(rx: Receiver<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>, url: &String, pow_difficulty: usize, dev_mode: bool) -> ChordService {
         let (finger_table_arc, predecessor_option_arc, kv_store_arc, successor_list_arc) = rx.await.unwrap();
         ChordService {
             address: url.clone(),
@@ -91,7 +93,8 @@ impl ChordService {
             kv_store: kv_store_arc,
             fix_finger_index: Arc::new(Mutex::new(0)),
             successor_list: successor_list_arc,
-            pow_difficulty
+            pow_difficulty,
+            dev_mode
         }
     }
 
@@ -218,6 +221,9 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn get_node_summary(&self, _: Request<Empty>) -> Result<Response<NodeSummaryMsg>, Status> {
+        if !self.dev_mode {
+            return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
+        }
         let finger_table_guard = self.finger_table.lock().unwrap();
         let predecessor_option = self.predecessor_option.lock().unwrap();
         let successor_list = self.successor_list.lock().unwrap();
@@ -238,12 +244,18 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
     async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
+        if !self.dev_mode {
+            return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
+        }
         Ok(Response::new(GetKvStoreSizeResponse {
             size: self.kv_store.lock().unwrap().len() as u32
         }))
     }
 
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
+        if !self.dev_mode {
+            return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
+        }
         let kv_pairs = {
             let one = HashPos::one();
             self.kv_store.lock().unwrap()
