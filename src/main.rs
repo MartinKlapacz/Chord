@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let p2p_address = config.p2p_address;
     let join_address_option = config.join_address;
     let pow_difficulty = config.pow_difficulty;
+    let dev_mode = config.dev_mode;
 
     let mut thread_handles = Vec::new();
 
@@ -80,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2, pow_difficulty).await);
+        let chord_service = ChordServer::new(ChordService::new(rx_grpc_service, &cloned_grpc_addr_2, pow_difficulty, dev_mode).await);
         info!("Starting up gRPC service on {}", cloned_grpc_addr_2);
 
         let reflection_service = tonic_reflection::server::Builder::configure()

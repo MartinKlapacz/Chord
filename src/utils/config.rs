@@ -20,7 +20,8 @@ pub struct Config {
     pub p2p_address: Address,
     pub join_address: Option<Address>,
     pub pow_difficulty: usize,
-    pub log_level_filter: LevelFilter
+    pub log_level_filter: LevelFilter,
+    pub dev_mode: bool
 }
 
 impl Config {
@@ -57,7 +58,13 @@ impl Config {
             .map(|log_level| LevelFilter::from_str(log_level))
             .map(|log_level| log_level.expect("Invalid log level"))
             .unwrap_or(LevelFilter::Info);
+        
+        let dev_mode = dht
+            .get("dev_mode")
+            .map(|dev_mode| bool::from_str(dev_mode))
+            .map(|dev_mode| dev_mode.expect("Invalid dev mode argument, use true or false"))
+            .unwrap_or(false);
 
-        Ok(Config { p2p_address, api_address, join_address, pow_difficulty, log_level_filter })
+        Ok(Config { p2p_address, api_address, join_address, pow_difficulty, log_level_filter, dev_mode })
     }
 }
