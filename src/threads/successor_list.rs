@@ -10,7 +10,9 @@ use crate::node::successor_list::{SUCCESSOR_LIST_SIZE, SuccessorList};
 use crate::threads::chord::connect_with_retry;
 use crate::threads::chord::chord_proto::Empty;
 
-
+/// periodic successor list checking:
+/// this function fetches the successor's successor list and updates this node's successor list
+/// with the successor's successor list
 pub async fn check_successor_list_periodically(local_grpc_service_address: String, rx: Receiver<Arc<Mutex<SuccessorList>>>) -> ! {
     let successor_list_arc = rx.await.unwrap();
     info!("Starting up periodic successor list check thread");

@@ -29,21 +29,32 @@ pub mod chord_proto {
 }
 
 
+/// The struct representing the running node. 
 pub struct ChordService {
+    /// gRPC address of the node
     address: String,
+    /// position in the hash ring
     pos: HashPos,
+    /// data structure containing routing information
     finger_table: Arc<Mutex<FingerTable>>,
+    /// predecessor handle
     predecessor_option: Arc<Mutex<Option<FingerEntry>>>,
+    /// key value storage
     kv_store: Arc<Mutex<KvStore>>,
+    /// round-robin pointer to the current finger updated by the fix_finger procedure  
     fix_finger_index: Arc<Mutex<usize>>,
+    /// list of the next n successor
     successor_list: Arc<Mutex<SuccessorList>>,
+    /// required number of trailing 0 bytes for a POW token to be valid
     pow_difficulty: usize,
+    /// flag that enables debugging RPCs
     dev_mode: bool
 }
 
 const MAX_RETRIES: u64 = 15;
 const CONNECTION_RETRY_SLEEP: u64 = 100;
 
+/// connection helper functions
 
 pub(crate) async fn connect(address: &Address) -> Result<ChordClient<Channel>, tonic::transport::Error> {
     ChordClient::connect(format!("http://{}", address)).await
@@ -134,6 +145,8 @@ impl ChordService {
 
 #[tonic::async_trait]
 impl chord_proto::chord_server::Chord for ChordService {
+    
+    /// finds the next responsible node for a given position in the hash ring
     async fn find_successor(
         &self,
         request: Request<chord_proto::HashPosMsg>,
@@ -180,6 +193,7 @@ impl chord_proto::chord_server::Chord for ChordService {
     }
 
 
+    /// returns current node's value of the predecessor handle
     async fn get_predecessor(&self, _request: Request<Empty>) -> Result<Response<GetPredecessorResponse>, Status> {
         let predecessor = match *self.predecessor_option.lock().unwrap() {
             Some(ref predecessor) => {
@@ -194,11 +208,13 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(GetPredecessorResponse { address_optional: Some(predecessor.into()) }))
     }
 
+    /// returns the current node's successor list
     async fn get_successor_list(&self, _: Request<Empty>) -> Result<Response<SuccessorListMsg>, Status> {
         Ok(Response::new(self.successor_list.lock().unwrap().clone().into()))
     }
 
 
+    /// find the finger in the finger table that closest precedes the hash position given in the request
     async fn find_closest_preceding_finger(&self, request: Request<HashPosMsg>) -> Result<Response<FingerEntryMsg>, Status> {
         let key = HashPos::from_be_bytes(request.get_ref().clone().key.try_into().unwrap());
         for finger in self.finger_table.lock().unwrap().fingers.iter().rev() {
@@ -220,6 +236,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         }))
     }
 
+    /// returns a human readable node summary (requires dev_mode = true)
     async fn get_node_summary(&self, _: Request<Empty>) -> Result<Response<NodeSummaryMsg>, Status> {
         if !self.dev_mode {
             return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
@@ -242,7 +259,8 @@ impl chord_proto::chord_server::Chord for ChordService {
             successor_list: Some(successor_list.clone().into()),
         }))
     }
-
+    
+    /// returns the number of key value pairs stored in storage (dev_mode = true)
     async fn get_kv_store_size(&self, _: Request<Empty>) -> Result<Response<GetKvStoreSizeResponse>, Status> {
         if !self.dev_mode {
             return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
@@ -252,6 +270,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         }))
     }
 
+    /// returns the full data stored in storage (dev_mode = true)
     async fn get_kv_store_data(&self, _: Request<Empty>) -> Result<Response<GetKvStoreDataResponse>, Status> {
         if !self.dev_mode {
             return Err(Status::unimplemented(DEBUG_RPCS_UNAVAILABLE_ERROR_MESSAGE))
@@ -269,7 +288,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(GetKvStoreDataResponse { kv_pairs }))
     }
 
-
+    /// GET operation on the key value storage 
     async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
         let key: Key = request.into_inner().key.try_into().unwrap();
         let predecessor_pos = {
@@ -315,7 +334,8 @@ impl chord_proto::chord_server::Chord for ChordService {
             return Err(Status::internal(msg));
         };
     }
-
+    
+    /// PUT operation on the key value storage 
     async fn put(&self, request: Request<PutRequest>) -> Result<Response<Empty>, Status> {
         let key = request.get_ref().key.clone().try_into().unwrap();
         let ttl = request.get_ref().ttl;
@@ -329,7 +349,10 @@ impl chord_proto::chord_server::Chord for ChordService {
         info!("Received PUT request ({:?}, {}) with ttl {} and replication {}", hash(&key), value, ttl, replication);
         Ok(Response::new(Empty {}))
     }
-
+    
+    
+    /// updates the finger table entries one after another in a round robin fashion by calling 
+    /// find_successor for position the finger table entries point to
     async fn fix_fingers(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         let index = (*self.fix_finger_index.lock().unwrap() + 1) % HashPos::finger_count();
         debug!("Fixing finger entry {}", index);
@@ -353,6 +376,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
+    /// updates the successor list and calls notify on the successor
     async fn stabilize(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         let (mut current_successor_client, current_successor_address) = self.get_client_for_closest_successor().await;
         let current_successors_predecessor_address_optional: Option<Address> = current_successor_client.get_predecessor(Request::new(Empty {}))
@@ -392,6 +416,10 @@ impl chord_proto::chord_server::Chord for ChordService {
 
     type NotifyStream = Pin<Box<dyn Stream<Item=Result<KvPairMsg, Status>> + Send>>;
 
+    /// Notify call that is typically called on the successor to notify it about this node's presence.
+    /// If this node just joined the cluster the new successor node needs to update its predecessor
+    /// handle and send a part of its data to this very node. The latter part is implemented using
+    /// server side streaming rpc.
     async fn notify(&self, request: Request<NotifyRequest>) -> Result<Response<Self::NotifyStream>, Status> {
 
         let notify_request = request.into_inner();
@@ -474,6 +502,9 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Box::pin(stream) as Self::NotifyStream))
     }
 
+    /// Receives a stream of key value pairs in a stream. Nodes that are about to shut down use this
+    /// call to send their data to their successor, as the successor will be responsible for this 
+    /// area in the hash ring.
     async fn handoff(&self, request: Request<Streaming<KvPairMsg>>) -> Result<Response<Empty>, Status> {
         let mut stream = request.into_inner();
         let mut counter = 0;
@@ -488,6 +519,7 @@ impl chord_proto::chord_server::Chord for ChordService {
         Ok(Response::new(Empty {}))
     }
 
+    /// dummy call, used to check if the receiver node is still available.
     async fn health(&self, _: Request<Empty>) -> Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }

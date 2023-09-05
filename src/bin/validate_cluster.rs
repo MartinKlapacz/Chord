@@ -41,13 +41,6 @@ async fn main() {
     }
 
     node_summaries.sort_by(|a: &NodeSummaryMsg, b: &NodeSummaryMsg| {
-        // let bytes_a: [u8; std::mem::size_of::<HashPos>()] = a.pos.unwrap().key.try_into().unwrap();
-        // let bytes_b: [u8; std::mem::size_of::<HashPos>()] = b.pos.unwrap().key.try_into().unwrap();
-        // let pos_a: HashPos = a.pos.unwrap().into();
-        // let pos_b: HashPos = b.pos.unwrap().into();
-        //
-        // pos_a.cmp(&pos_b)
-        // HashPos::from_be_bytes(bytes_a).cmp(&HashPos::from_be_bytes(bytes_b))
         foo(a.pos.clone().unwrap()).cmp(&foo(b.pos.clone().unwrap()))
     });
 

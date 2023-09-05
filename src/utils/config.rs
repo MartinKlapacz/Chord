@@ -6,6 +6,9 @@ use crate::utils::constants::POW_DIFFICULTY_DEFAULT;
 
 use crate::utils::types::Address;
 
+
+/// The config struct is initialized from a config file upon node start up
+/// Its fields is used in the main.rs and other locations in the code to configure the node
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -58,7 +61,7 @@ impl Config {
             .map(|log_level| LevelFilter::from_str(log_level))
             .map(|log_level| log_level.expect("Invalid log level"))
             .unwrap_or(LevelFilter::Info);
-        
+
         let dev_mode = dht
             .get("dev_mode")
             .map(|dev_mode| bool::from_str(dev_mode))

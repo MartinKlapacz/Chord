@@ -46,6 +46,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut thread_handles = Vec::new();
 
+    // Most threads need the address to the local gRPC service. Each thread needs an own variable
+    // with that address as it needs to be moved into the thread
     let cloned_grpc_addr_1 = p2p_address.clone();
     let cloned_grpc_addr_2 = p2p_address.clone();
     let cloned_grpc_addr_3 = p2p_address.clone();
@@ -55,11 +57,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_7 = p2p_address.clone();
     let own_grpc_address_8 = p2p_address.clone();
 
+    // tokio one-shot-channels used for communication between threads
     let (tx1, rx_grpc_service) = oneshot::channel();
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
     let (tx3, rx_check_predecessor) = oneshot::channel();
     let (tx4, rx_successor_list) = oneshot::channel();
 
+
+    // the main thread starts up all other threads and finally awaits them
 
     thread_handles.push(tokio::spawn(async move {
         setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)

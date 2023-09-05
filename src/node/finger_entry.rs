@@ -3,6 +3,7 @@ use std::fmt;
 use crate::utils::types::{Address, HashPos};
 
 
+/// An entry in the FingerTable
 #[derive(Clone, Default)]
 pub struct FingerEntry {
     pub(crate) key: HashPos,

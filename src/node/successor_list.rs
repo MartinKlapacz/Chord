@@ -2,6 +2,10 @@ use crate::utils::types::Address;
 
 pub const SUCCESSOR_LIST_SIZE: usize = 3;
 
+/// Instead of only the direct successor, each node stores the urls of its 3 next successors.
+/// This makes the cluster more robust and allows it to continue running even if 2 direct neighbor 
+/// fail at the same time.
+
 #[derive(Default, Debug, Clone)]
 pub struct SuccessorList {
     pub own_address: Address,

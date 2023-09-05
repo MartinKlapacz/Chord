@@ -5,6 +5,10 @@ use crate::utils::crypto;
 use crate::utils::proof_of_work::PowToken;
 use crate::utils::types::{Address, HashPos};
 
+
+/// This file contains conversion implementations, mostly from proto-generated message structs to application structs
+/// This way conversion details are hidden from application logic
+
 impl Into<FingerEntryMsg> for AddressMsg {
     fn into(self) -> FingerEntryMsg {
         FingerEntryMsg {

@@ -29,6 +29,8 @@ impl HashRingKey for HashPos {
     }
 }
 
+/// Central hashing function used to map addresses to hash ring locations
+/// It is also used for POW token validation
 pub fn hash(input: &[u8]) -> HashPos {
     let mut hasher = Hasher::new();
     hasher.update(input);
