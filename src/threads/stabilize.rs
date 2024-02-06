@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tokio::time::sleep;
 use tonic::Request;
 

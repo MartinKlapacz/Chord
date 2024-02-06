@@ -1,29 +1,28 @@
 use std::error::Error;
 use std::process::exit;
 
-use log::{info, LevelFilter};
+use log::info;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tonic::transport::{Server};
+use tonic::transport::Server;
+
+use chord::utils::config::Config;
 
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
 use crate::threads::chord::ChordService;
+use crate::threads::client_api::handle_client_connection;
 use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::health::check_predecessor_health_periodically;
 use crate::threads::setup::setup;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
-use crate::threads::client_api::handle_client_connection;
-
-use chord::utils::config::Config;
 
 mod node;
 mod utils;
 mod threads;
 
 #[allow(warnings, unused, unused_imports, unused_import_braces, re)]
-
 pub mod chord_proto {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
 }

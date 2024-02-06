@@ -14,7 +14,7 @@ use crate::utils::crypto::hash;
 use crate::utils::types::{Address, KvStore};
 
 /// Setup function that distinguishes betwenn two scenarios:
-/// 1. The node joins an existing cluster (join_address_option is None) 
+/// 1. The node joins an existing cluster (join_address_option is None)
 /// 2. The node starts up a new cluster (join_address_option is given)
 pub async fn setup(join_address_option: Option<Address>, own_grpc_address_str: &String,
                    tx_grpc_thread: Sender<(Arc<Mutex<FingerTable>>, Arc<Mutex<Option<FingerEntry>>>, Arc<Mutex<KvStore>>, Arc<Mutex<SuccessorList>>)>,
@@ -43,7 +43,7 @@ pub async fn setup(join_address_option: Option<Address>, own_grpc_address_str: &
             let mut successor_client = connect_with_retry(&successor_address)
                 .await
                 .unwrap();
-            let successor_list: SuccessorList = successor_client.get_successor_list(Request::new(Empty {}))
+            let _: SuccessorList = successor_client.get_successor_list(Request::new(Empty {}))
                 .await
                 .unwrap().into_inner().into();
 
