@@ -1,6 +1,6 @@
 # Chord Implementation in Rust
 
-This implementation is based on the Chord protocol introduced in the paper by [Stoica et al](https://ieeexplore.ieee.org/abstract/document/1180543/). A Chord network is a type of distributed hash table (DHT) that uses consistent hashing to distribute keys across a peer-to-peer network.  It provides efficient methods for key-based lookup and data storage, enabling fault-tolerant and scalable systems. Take a look at the [documentation](docs/finalDocumentation.pdf) for more details on the implementation and its features.
+This implementation is based on the Chord protocol introduced in the [paper by Stoica et al](https://ieeexplore.ieee.org/abstract/document/1180543/). A Chord network is a type of distributed hash table (DHT) that uses consistent hashing to distribute keys across a peer-to-peer network.  It provides efficient methods for key-based lookup and data storage, enabling fault-tolerant and scalable systems. Take a look at the [documentation](docs/finalDocumentation.pdf) for more details on the implementation and its features.
 
 ## Installation
 
