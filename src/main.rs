@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::process::exit;
 
-use log::info;
+use actix_web::{App, get, HttpResponse, HttpServer, post, Responder, web};
+use log::{error, info};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
@@ -17,6 +18,7 @@ use crate::threads::setup::setup;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
+use crate::threads::web::{hello, index};
 
 mod node;
 mod utils;
@@ -26,6 +28,7 @@ mod threads;
 pub mod chord_proto {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
 }
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -130,6 +133,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
     }));
 
+    // Setup for web interface
+    let web_interface_addr = "127.0.0.1:8080"; // Specify the address for the web interface
+
+
+    thread_handles.push(tokio::spawn(async move {
+        let server = HttpServer::new(|| { App::new()
+            .service(index)
+            .service(hello)
+        })
+            .bind(web_interface_addr)
+            .unwrap()
+            .run();
+
+        if let Err(e) = server.await {
+            error!("Web server error: {}", e);
+        }
+    }));
 
     for handle in thread_handles {
         handle.await?;
@@ -137,3 +157,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+
