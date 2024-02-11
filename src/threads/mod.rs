@@ -6,3 +6,4 @@ pub mod fix_fingers;
 pub mod stabilize;
 pub mod health;
 pub mod successor_list;
+pub mod web;

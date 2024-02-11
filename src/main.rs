@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::process::exit;
 
-use log::info;
+use actix_web::{App, get, HttpResponse, HttpServer, post, Responder, web};
+use log::{error, info};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
@@ -17,6 +18,7 @@ use crate::threads::setup::setup;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
+use crate::threads::web::index;
 
 mod node;
 mod utils;
@@ -27,6 +29,7 @@ pub mod chord_proto {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("chord_descriptor");
 }
 
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::load().unwrap();
@@ -36,9 +39,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_level(config.log_level_filter)
         .init()
         .unwrap();
+    let config_clone = config.clone();
 
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;
+    let web_address = config.web_address;
     let join_address_option = config.join_address;
     let pow_difficulty = config.pow_difficulty;
     let dev_mode = config.dev_mode;
@@ -61,12 +66,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
     let (tx3, rx_check_predecessor) = oneshot::channel();
     let (tx4, rx_successor_list) = oneshot::channel();
+    let (tx5, rx_web_interface) = oneshot::channel();
 
 
     // the main thread starts up all other threads and finally awaits them
 
     thread_handles.push(tokio::spawn(async move {
-        setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
+        setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4, tx5)
             .await
             .unwrap();
     }));
@@ -130,6 +136,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
     }));
 
+    // Setup for web interface
+
+
+    thread_handles.push(tokio::spawn(async move {
+        info!("Starting up web interface  thread on {}", web_address);
+        let finger_table_arc = rx_web_interface.await.unwrap();
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(finger_table_arc.clone()))
+                .app_data(web::Data::new(config_clone.clone()))
+                .service(index)
+        })
+            .bind(web_address)
+            .unwrap()
+            .run();
+        if let Err(e) = server.await {
+            error!("Web server error: {}", e);
+        }
+    }));
 
     for handle in thread_handles {
         handle.await?;
@@ -137,3 +162,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+

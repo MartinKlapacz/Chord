@@ -1,0 +1,57 @@
+<!-- templates/index.html.tera -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        table { width: 50%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+<h1>Chord Node Web Interface</h1>
+<h2>Config</h2>
+<table>
+    <tr>
+        <td>Api Address (for tcp client)</td>
+        <td>{{ config.api_address}}</td>
+    </tr>
+    <tr>
+        <td>P2P Address (gRPC service)</td>
+        <td>{{ config.p2p_address}}</td>
+    </tr>
+    <tr>
+        <td>Web Address (HTTP service)</td>
+        <td>{{ config.web_address}}</td>
+    </tr>
+    <tr>
+        <td>POW Difficulty</td>
+        <td>{{ config.pow_difficulty}}</td>
+    </tr>
+    <tr>
+        <td>Dev Mode</td>
+        <td>{{ config.dev_mode}}</td>
+    </tr>
+</table>
+<h2>Finger Table</h2>
+<table>
+    <tr>
+        <th>Finger index</th>
+        <th>Address</th>
+        <th>Absolute Key</th>
+        <th>Relative Key</th>
+    </tr>
+    {% for finger in fingers %}
+    <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ finger.address }}</td>
+        <td>{{ finger.key }}</td>
+        <td>{{ finger.key / max_pos * 100 | round(precision=6) }}%</td>
+    </tr>
+    {% endfor %}
+</table>
+</body>
+</html>
