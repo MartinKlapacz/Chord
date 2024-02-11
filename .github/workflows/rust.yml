@@ -48,14 +48,14 @@ jobs:
       - name: Image digest
         run: echo ${{ steps.docker_build.output.digest }}
 
-#    - name: Pull image and deploy with Docker Compose
-#      uses: appleboy/ssh-action@master
-#      with:
-#        host: ${{ secrets.SSH_HOST }}
-#        username: ${{ secrets.SSH_USERNAME }}
-#        key: ${{ secrets.SSH_KEY }}
-#        port: ${{ secrets.SSH_PORT }}
-#        script: |
-#          docker compose -f ./cleanfolio.yml down
-#          docker compose -f ./cleanfolio.yml pull
-#          docker compose -f ./cleanfolio.yml up -d
+      - name: Pull image and deploy with Docker Compose
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            docker compose -f ./chord.yml down
+            docker compose -f ./chord.yml pull
+            docker compose -f ./chord.yml up -d
