@@ -13,11 +13,49 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout sources
-      uses: actions/checkout@v2
-    - name: Install protobuf compiler
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push image to Dockerhub
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/chord:latest
+
+      - name: Image digest
+        run: echo ${{ steps.docker_build.output.digest }}
+
+#    - name: Pull image and deploy with Docker Compose
+#      uses: appleboy/ssh-action@master
+#      with:
+#        host: ${{ secrets.SSH_HOST }}
+#        username: ${{ secrets.SSH_USERNAME }}
+#        key: ${{ secrets.SSH_KEY }}
+#        port: ${{ secrets.SSH_PORT }}
+#        script: |
+#          docker compose -f ./cleanfolio.yml down
+#          docker compose -f ./cleanfolio.yml pull
+#          docker compose -f ./cleanfolio.yml up -d
