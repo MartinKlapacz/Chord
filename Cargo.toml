@@ -18,6 +18,7 @@ tokio-stream = { version = "0.1", features = ["net"] }
 rust-ini = "0.19.0"
 rayon = "1.7.0"
 actix-web = "4.0.0"
+tera = "1.19.1"
 
 
 [build-dependencies]
