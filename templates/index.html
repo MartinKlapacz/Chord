@@ -12,6 +12,31 @@
     </style>
 </head>
 <body>
+<h1>Chord Node Web Interface</h1>
+<h2>Config</h2>
+<table>
+    <tr>
+        <td>Api Address (for tcp client)</td>
+        <td>{{ config.api_address}}</td>
+    </tr>
+    <tr>
+        <td>P2P Address (gRPC service)</td>
+        <td>{{ config.p2p_address}}</td>
+    </tr>
+    <tr>
+        <td>Web Address (HTTP service)</td>
+        <td>{{ config.web_address}}</td>
+    </tr>
+    <tr>
+        <td>POW Difficulty</td>
+        <td>{{ config.pow_difficulty}}</td>
+    </tr>
+    <tr>
+        <td>Dev Mode</td>
+        <td>{{ config.dev_mode}}</td>
+    </tr>
+</table>
+<h2>Finger Table</h2>
 <table>
     <tr>
         <th>Finger index</th>

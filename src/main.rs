@@ -39,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_level(config.log_level_filter)
         .init()
         .unwrap();
+    let config_clone = config.clone();
 
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;
@@ -144,6 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(finger_table_arc.clone()))
+                .app_data(web::Data::new(config_clone.clone()))
                 .service(index)
         })
             .bind(web_address)

@@ -3,6 +3,7 @@ use std::str::FromStr;
 use clap::Parser;
 use ini::{Error, Ini};
 use log::LevelFilter;
+use serde::Serialize;
 
 use crate::utils::constants::POW_DIFFICULTY_DEFAULT;
 use crate::utils::types::Address;
@@ -17,13 +18,14 @@ pub struct Cli {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Config {
     pub api_address: Address,
     pub p2p_address: Address,
     pub web_address: Address,
     pub join_address: Option<Address>,
     pub pow_difficulty: usize,
+    #[serde(skip_serializing)]
     pub log_level_filter: LevelFilter,
     pub dev_mode: bool,
 }
