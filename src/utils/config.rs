@@ -1,11 +1,11 @@
 use std::str::FromStr;
+
 use clap::Parser;
 use ini::{Error, Ini};
 use log::LevelFilter;
+
 use crate::utils::constants::POW_DIFFICULTY_DEFAULT;
-
 use crate::utils::types::Address;
-
 
 /// The config struct is initialized from a config file upon node start up
 /// Its fields is used in the main.rs and other locations in the code to configure the node
@@ -21,10 +21,11 @@ pub struct Cli {
 pub struct Config {
     pub api_address: Address,
     pub p2p_address: Address,
+    pub web_address: Address,
     pub join_address: Option<Address>,
     pub pow_difficulty: usize,
     pub log_level_filter: LevelFilter,
-    pub dev_mode: bool
+    pub dev_mode: bool,
 }
 
 impl Config {
@@ -44,6 +45,12 @@ impl Config {
         let api_address = dht
             .get("api_address")
             .ok_or("'api_address' value required")
+            .unwrap()
+            .to_string();
+
+        let web_address = dht
+            .get("web_address")
+            .ok_or("'web_address' value required")
             .unwrap()
             .to_string();
 
@@ -68,6 +75,6 @@ impl Config {
             .map(|dev_mode| dev_mode.expect("Invalid dev mode argument, use true or false"))
             .unwrap_or(false);
 
-        Ok(Config { p2p_address, api_address, join_address, pow_difficulty, log_level_filter, dev_mode })
+        Ok(Config { p2p_address, api_address, web_address, join_address, pow_difficulty, log_level_filter, dev_mode })
     }
 }
