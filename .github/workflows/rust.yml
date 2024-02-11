@@ -19,5 +19,7 @@ jobs:
       run: echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
     - name: Build
       run: cargo build --verbose
+      working-directory: ./Chord-Network
     - name: Run tests
       run: cargo test --verbose
+      working-directory: ./Chord-Network
