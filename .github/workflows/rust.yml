@@ -15,7 +15,6 @@ jobs:
     steps:
     - name: Install protobuf compiler
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-      uses: actions/checkout@v3
     - name: Set PROTOC env variable
       run: echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
     - name: Build
