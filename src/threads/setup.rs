@@ -21,6 +21,7 @@ pub async fn setup(join_address_option: Option<Address>, own_grpc_address_str: &
                    tx_handoff_thread: Sender<Arc<Mutex<KvStore>>>,
                    tx_check_predecessor: Sender<Arc<Mutex<Option<FingerEntry>>>>,
                    tx_successor_list: Sender<Arc<Mutex<SuccessorList>>>,
+                   tx_web_interface: Sender<Arc<Mutex<FingerTable>>>,
 ) -> Result<(), Box<dyn Error>> {
     info!("Starting up setup thread");
     let own_id = hash(own_grpc_address_str.as_bytes());
@@ -58,6 +59,7 @@ pub async fn setup(join_address_option: Option<Address>, own_grpc_address_str: &
     };
 
     tx_grpc_thread.send((finger_table_arc.clone(), predecessor_option_arc.clone(), kv_store_arc.clone(), successor_list_arc.clone())).unwrap();
+    tx_web_interface.send(finger_table_arc.clone()).unwrap();
     tx_handoff_thread.send(kv_store_arc).unwrap();
     tx_check_predecessor.send(predecessor_option_arc).unwrap();
     tx_successor_list.send(successor_list_arc).unwrap();

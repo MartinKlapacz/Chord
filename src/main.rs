@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;
+    let web_interface_address = "127.0.0.1:8080";
     let join_address_option = config.join_address;
     let pow_difficulty = config.pow_difficulty;
     let dev_mode = config.dev_mode;
@@ -64,12 +65,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (tx2, rx_shutdown_handoff) = oneshot::channel();
     let (tx3, rx_check_predecessor) = oneshot::channel();
     let (tx4, rx_successor_list) = oneshot::channel();
+    let (tx5, rx_web_interface) = oneshot::channel();
 
 
     // the main thread starts up all other threads and finally awaits them
 
     thread_handles.push(tokio::spawn(async move {
-        setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4)
+        setup(join_address_option, &cloned_grpc_addr_1, tx1, tx2, tx3, tx4, tx5)
             .await
             .unwrap();
     }));
@@ -134,18 +136,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }));
 
     // Setup for web interface
-    let web_interface_addr = "127.0.0.1:8080"; // Specify the address for the web interface
 
 
     thread_handles.push(tokio::spawn(async move {
-        let server = HttpServer::new(|| { App::new()
-            .service(index)
-            .service(hello)
+        info!("Starting up web interface  thread on {}", web_interface_address);
+        let finger_table_arc = rx_web_interface.await.unwrap();
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(finger_table_arc.clone()))
+                .service(index)
         })
-            .bind(web_interface_addr)
+            .bind(web_interface_address)
             .unwrap()
             .run();
-
         if let Err(e) = server.await {
             error!("Web server error: {}", e);
         }
