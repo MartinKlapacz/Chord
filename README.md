@@ -32,3 +32,8 @@ Use the following commands to set and get key-value-pairs on the node running on
 
 `python3 dht_client.py -a 127.0.0.1 -p 5501 -g -k hello`
 
+## Live Instances
+A cluster consisting of the following nodes is running in my cloud:
+- [**Instance 1**](http://chord.martinklapacz.org:5711)
+- [**Instance 2**](http://chord.martinklapacz.org:5712)
+- [**Instance 3**](http://chord.martinklapacz.org:5713)
