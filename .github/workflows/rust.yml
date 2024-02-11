@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main-tmp" ]
   pull_request:
     branches: [ "main" ]
 
@@ -13,13 +13,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout sources
+      uses: actions/checkout@v2
     - name: Install protobuf compiler
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - name: Set PROTOC env variable
-      run: echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
     - name: Build
       run: cargo build --verbose
-      working-directory: ./Chord-Network
     - name: Run tests
       run: cargo test --verbose
-      working-directory: ./Chord-Network
