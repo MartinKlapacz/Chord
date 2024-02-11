@@ -18,7 +18,7 @@ use crate::threads::setup::setup;
 use crate::threads::shutdown_handoff::shutdown_handoff;
 use crate::threads::stabilize::stabilize_periodically;
 use crate::threads::successor_list::check_successor_list_periodically;
-use crate::threads::web::{hello, index};
+use crate::threads::web::index;
 
 mod node;
 mod utils;
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let api_address = config.api_address;
     let p2p_address = config.p2p_address;
-    let web_interface_address = "127.0.0.1:8080";
+    let web_address = config.web_address;
     let join_address_option = config.join_address;
     let pow_difficulty = config.pow_difficulty;
     let dev_mode = config.dev_mode;
@@ -139,14 +139,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     thread_handles.push(tokio::spawn(async move {
-        info!("Starting up web interface  thread on {}", web_interface_address);
+        info!("Starting up web interface  thread on {}", web_address);
         let finger_table_arc = rx_web_interface.await.unwrap();
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(finger_table_arc.clone()))
                 .service(index)
         })
-            .bind(web_interface_address)
+            .bind(web_address)
             .unwrap()
             .run();
         if let Err(e) = server.await {
