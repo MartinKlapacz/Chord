@@ -1,0 +1,40 @@
+version: '3'
+services:
+  node1:
+    build: .
+    container_name: chord_node_1
+    ports:
+      - "5701:5701"
+      - "5501:5501"
+    command: ["./target/release/chord", "--config=configs/config1.ini"]
+    expose:
+      - 5601
+    network_mode: host
+
+  node2:
+    build: .
+    container_name: chord_node_2
+    ports:
+      - "5702:5702"
+      - "5502:5502"
+    command: ["./target/release/chord", "--config=configs/config2.ini"]
+    expose:
+      - 5602
+    network_mode: host
+    depends_on:
+      - node1
+
+  node3:
+    build: .
+    container_name: chord_node_3
+    ports:
+      - "5703:5703"
+      - "5503:5503"
+    command: ["./target/release/chord", "--config=configs/config3.ini"]
+    expose:
+      - 5603
+    network_mode: host
+    depends_on:
+      - node1
+      - node2
+
