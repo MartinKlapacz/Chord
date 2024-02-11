@@ -15,7 +15,7 @@ pub async fn index(
     let tera = Tera::new("templates/**/*").unwrap();
 
     let mut context = Context::new();
-    context.insert("title", "My Web Page");
+    context.insert("title", "Chord Node");
 
     let finger_table_guard = finger_table_data.lock().unwrap();
 
