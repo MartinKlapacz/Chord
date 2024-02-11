@@ -160,6 +160,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         handle.await?;
     }
 
+    println!("hello world");
+
     Ok(())
 }
 
