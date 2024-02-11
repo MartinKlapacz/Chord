@@ -6,10 +6,21 @@
     <title>{{ title }}</title>
 </head>
 <body>
-    <ul>
-        {% for finger in fingers %}
-            <li>{{ finger.address }}</li>
-        {% endfor %}
-    </ul>
+<table>
+    <tr>
+        <th>Finger index</th>
+        <th>Address</th>
+        <th>Absolute Key</th>
+        <th>Relative Key</th>
+    </tr>
+    {% for finger in fingers %}
+    <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ finger.address }}</td>
+        <td>{{ finger.key }}</td>
+        <td>{{ finger.key / max_pos * 100 | round(precision=6) }}%</td>
+    </tr>
+    {% endfor %}
+</table>
 </body>
 </html>

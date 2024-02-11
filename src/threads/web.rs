@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use actix_web::{get, HttpResponse, Responder, web};
 use tera::{Context, Tera};
+use chord::utils::types::HashPos;
 
 use crate::node::finger_table::FingerTable;
 
@@ -13,7 +14,9 @@ pub async fn index(finger_table_data: web::Data<Arc<Mutex<FingerTable>>>) -> imp
     context.insert("title", "My Web Page");
 
     let finger_table_guard = finger_table_data.lock().unwrap();
+
     context.insert("fingers", &finger_table_guard.fingers);
+    context.insert("max_pos", &HashPos::MAX);
 
     let rendered_html = tera.render("index.html", &context).unwrap();
 
