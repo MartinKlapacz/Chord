@@ -12,7 +12,10 @@ pub async fn index(finger_table_data: web::Data<Arc<Mutex<FingerTable>>>) -> imp
 
     let mut context = Context::new();
     context.insert("title", "My Web Page");
-    context.insert("num", finger_table_data.lock().unwrap().fingers.len().to_string().as_str());
+
+    let finger_table_lock = finger_table_data.lock().unwrap(); // Handle errors as necessary
+    context.insert("fingers", &finger_table_lock.fingers);
+
     // context.insert("fingers", finger_table_data.lock().unwrap().fingers);
 
     let rendered_html = tera.render("index.html", &context).unwrap();

@@ -6,6 +6,10 @@
     <title>{{ title }}</title>
 </head>
 <body>
-    <h1>{{ num }}</h1>
+    <ul>
+        {% for finger in fingers %}
+            <li>finger.index</li>
+        {% endfor %}
+    </ul>
 </body>
 </html>

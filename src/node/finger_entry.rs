@@ -1,10 +1,11 @@
 use std::fmt::Debug;
 use std::fmt;
+use serde::Serialize;
 use crate::utils::types::{Address, HashPos};
 
 
 /// An entry in the FingerTable
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize)]
 pub struct FingerEntry {
     pub(crate) key: HashPos,
     pub(crate) address: Address,

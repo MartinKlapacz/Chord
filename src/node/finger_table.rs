@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use serde::Serialize;
 
 use crate::utils::crypto::{HashRingKey};
 use crate::node::finger_entry::FingerEntry;
@@ -7,7 +8,7 @@ use crate::utils::types::{Address, HashPos};
 
 /// The data structure that contains the routing information used for efficient node look up
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FingerTable {
     pub fingers: Vec<FingerEntry>,
 }
