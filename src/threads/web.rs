@@ -12,7 +12,7 @@ pub async fn index(
     finger_table_data: web::Data<Arc<Mutex<FingerTable>>>,
     config: web::Data<Config>
 ) -> impl Responder {
-    let tera = Tera::new("templates/**/*").unwrap();
+    let tera = Tera::new("static/html/**/*").unwrap();
 
     let mut context = Context::new();
     context.insert("title", "Chord Node");
