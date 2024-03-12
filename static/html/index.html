@@ -13,6 +13,18 @@
 </head>
 <body>
 <h1>Chord Node Web Interface</h1>
+
+<h2>Submit Get Request</h2>
+<form id="submit-form">
+    <label for="get-request-input">GET</label>
+    <input type="text" id="get-request-input" name="get_input" placeholder="Enter your value here" required>
+    <button type="submit">Submit</button>
+</form>
+
+{% if get_response %}
+    <h3>{{ get_response }}</h3>
+{% endif %}
+
 <h2>Config</h2>
 <table>
     <tr>
