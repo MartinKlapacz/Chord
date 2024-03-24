@@ -7,11 +7,13 @@ use tera::{Context, Tera};
 use tonic::Request;
 
 use chord::utils::config::Config;
+use chord::utils::crypto;
 use chord::utils::types::HashPos;
 
 use crate::node::finger_table::FingerTable;
 use crate::threads::chord::chord_proto::{GetRequest, GetStatus, PutRequest};
 use crate::threads::chord::connect_with_retry;
+use crate::threads::client_api::perform_chord_look_up;
 
 #[derive(Deserialize)]
 struct QueryParams {
@@ -70,13 +72,16 @@ pub async fn index(
 }
 
 async fn perform_get_and_update_context(key: &String, local_grpc_address: &String, context: &mut Context) {
-    let mut local_chord_client = connect_with_retry(&local_grpc_address).await.unwrap();
     let mut key_array: [u8; 32] = [0; 32];
     for (i, c) in key.chars().enumerate() {
         key_array[i] = c as u8;
     }
 
-    let response = local_chord_client.get(Request::new(GetRequest {
+    let hash_ring_pos: HashPos = crypto::hash(key_array.as_slice());
+    let mut responsible_node_client = perform_chord_look_up(&hash_ring_pos, local_grpc_address.as_str())
+        .await;
+
+    let response = responsible_node_client.get(Request::new(GetRequest {
         key: key_array.to_vec(),
     })).await.unwrap();
 
@@ -96,13 +101,16 @@ async fn perform_get_and_update_context(key: &String, local_grpc_address: &Strin
 }
 
 async fn perform_put_and_update_context(key: &String, value: String, local_grpc_address: &String, context: &mut Context) {
-    let mut local_chord_client = connect_with_retry(&local_grpc_address).await.unwrap();
     let mut key_array: [u8; 32] = [0; 32];
     for (i, c) in key.chars().enumerate() {
         key_array[i] = c as u8;
     }
 
-    let _ = local_chord_client.put(Request::new(PutRequest {
+    let hash_ring_pos: HashPos = crypto::hash(key_array.as_slice());
+    let mut responsible_node_client = perform_chord_look_up(&hash_ring_pos, local_grpc_address.as_str())
+        .await;
+
+    let _ = responsible_node_client.put(Request::new(PutRequest {
         key: key_array.to_vec(),
         ttl: 100000,
         replication: 0,

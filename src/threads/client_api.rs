@@ -107,7 +107,7 @@ async fn handle_put(grpc_address: &String, socket: &mut TcpStream, size: u16) ->
     }
 }
 
-async fn perform_chord_look_up(key: &HashPos, grpc_address: &str) -> ChordClient<Channel> {
+pub async fn perform_chord_look_up(key: &HashPos, grpc_address: &str) -> ChordClient<Channel> {
     let mut local_node_client: ChordClient<Channel> = connect_with_retry(&grpc_address.to_string())
         .await
         .unwrap();
