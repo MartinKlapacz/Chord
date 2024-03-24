@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::process::exit;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use actix_web::{App, get, HttpResponse, HttpServer, post, Responder, web};
 use log::{error, info};
@@ -9,8 +10,8 @@ use tonic::transport::Server;
 
 use chord::utils::config::Config;
 
+use crate::threads::chord::{ChordService, connect_with_retry};
 use crate::threads::chord::chord_proto::chord_server::ChordServer;
-use crate::threads::chord::ChordService;
 use crate::threads::client_api::handle_client_connection;
 use crate::threads::fix_fingers::fix_fingers_periodically;
 use crate::threads::health::check_predecessor_health_periodically;
@@ -60,6 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cloned_grpc_addr_6 = p2p_address.clone();
     let cloned_grpc_addr_7 = p2p_address.clone();
     let own_grpc_address_8 = p2p_address.clone();
+    let own_grpc_address_9 = p2p_address.clone();
 
     // tokio one-shot-channels used for communication between threads
     let (tx1, rx_grpc_service) = oneshot::channel();
@@ -142,10 +144,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up web interface  thread on {}", web_address);
         let finger_table_arc = rx_web_interface.await.unwrap();
+        let local_chord_client = connect_with_retry(&own_grpc_address_9).await.unwrap();
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(finger_table_arc.clone()))
                 .app_data(web::Data::new(config_clone.clone()))
+                .app_data(web::Data::new(Arc::new(Mutex::new(local_chord_client.clone()))))
                 .service(index)
         })
             .bind(web_address)
