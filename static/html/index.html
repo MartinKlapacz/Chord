@@ -5,35 +5,68 @@
     <meta charset="UTF-8">
     <title>{{ title }}</title>
     <style>
-        body { font-family: Arial, sans-serif; }
-        table { width: 50%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        body {
+            font-family: Arial, sans-serif;
+        }
+        table {
+            width: 50%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .full-cell-input {
+            width: 100%;
+            height: 100%;
+            border: none; /* Optional: removes the border of the input field */
+            box-sizing: border-box; /* Includes padding and border in the element's total width and height */
+            padding: 10px; /* Optional: adds some padding inside the input field */
+        }
+
+        /* Optional: Adjusts the input field to have a slight border on focus */
+        .full-cell-input:hover {
+            outline: none;
+            border: 1px solid blue;
+        }
     </style>
 </head>
 <body>
 <h1>Chord Node Web Interface</h1>
 
-<h2>Submit Get Request</h2>
+<h2>Get Requests</h2>
 <form id="get-form">
-    <label for="get-request-input">GET</label>
-    <input type="text" id="get-request-input" name="get_input" placeholder="Enter your value here" required>
+    <table>
+        <tr>
+            <th></th>
+            <th></th>
+            <th>status</th>
+            <th>response</th>
+        </tr>
+        <td>
+            <label for="get-request-input-field">GET</label>
+        </td>
+        <td>
+            <input type="text" id="get-request-input-field" name="get_request_key" class="full-cell-input" required>
+        </td>
+        <td>
+            {% if response_status %}
+                {{ response_status }}
+            {% endif %}
+        </td>
+        <td>
+            {% if get_response %}
+                {{ get_response }}
+            {% endif %}
+        </td>
+    </table>
     <button type="submit">Submit</button>
 </form>
-{% if response_status %}
-    <div>
-        {{ response_status }}
-        {% if get_response %}
-            : {{ get_response }}
-        {% endif %}
-    </div>
-{% endif %}
-<br>
-<br>
-<br>
-<br>
-
-<h2>Put Request</h2>
+<h2>Put Requests</h2>
 <form id="put-form">
 
     <table>
@@ -42,7 +75,7 @@
                 <label for="put-key-input">Key</label>
             </td>
             <td>
-                <input type="text" id="put-key-input" name="put_key_input">
+                <input type="text" id="put-key-input" name="put_request_key" class="full-cell-input">
             </td>
         </tr>
         <tr>
@@ -50,14 +83,12 @@
                 <label for="put-value-input">Value</label>
             </td>
             <td>
-                <input type="text" id="put-value-input" name="put_value_input">
+                <input type="text" id="put-value-input" name="put_request_value" class="full-cell-input">
             </td>
         </tr>
     </table>
     <button type="submit">Perform request</button>
 </form>
-
-
 
 
 <h2>Config</h2>
