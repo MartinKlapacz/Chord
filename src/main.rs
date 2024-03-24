@@ -144,12 +144,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     thread_handles.push(tokio::spawn(async move {
         info!("Starting up web interface  thread on {}", web_address);
         let finger_table_arc = rx_web_interface.await.unwrap();
-        let local_chord_client = connect_with_retry(&own_grpc_address_9).await.unwrap();
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(finger_table_arc.clone()))
                 .app_data(web::Data::new(config_clone.clone()))
-                .app_data(web::Data::new(Arc::new(Mutex::new(local_chord_client.clone()))))
+                .app_data(web::Data::new(own_grpc_address_9.clone()))
                 .service(index)
         })
             .bind(web_address)

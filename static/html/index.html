@@ -15,7 +15,7 @@
 <h1>Chord Node Web Interface</h1>
 
 <h2>Submit Get Request</h2>
-<form id="submit-form">
+<form id="get-form">
     <label for="get-request-input">GET</label>
     <input type="text" id="get-request-input" name="get_input" placeholder="Enter your value here" required>
     <button type="submit">Submit</button>
@@ -28,6 +28,37 @@
         {% endif %}
     </div>
 {% endif %}
+<br>
+<br>
+<br>
+<br>
+
+<h2>Put Request</h2>
+<form id="put-form">
+
+    <table>
+        <tr>
+            <td>
+                <label for="put-key-input">Key</label>
+            </td>
+            <td>
+                <input type="text" id="put-key-input" name="put_key_input">
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label for="put-value-input">Value</label>
+            </td>
+            <td>
+                <input type="text" id="put-value-input" name="put_value_input">
+            </td>
+        </tr>
+    </table>
+    <button type="submit">Perform request</button>
+</form>
+
+
+
 
 <h2>Config</h2>
 <table>
