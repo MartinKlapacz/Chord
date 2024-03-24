@@ -49,6 +49,7 @@ pub async fn index(
                 perform_put_and_update_context(&put_key_input, put_value_input, &local_grpc_address, &mut context)
                     .await;
             }
+            QueryParams { get_input: None, put_key_input: None, put_value_input: None } => {}
             _ => { panic!("Invalid query params") }
         }
     }
