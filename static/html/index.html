@@ -20,9 +20,8 @@
     <input type="text" id="get-request-input" name="get_input" placeholder="Enter your value here" required>
     <button type="submit">Submit</button>
 </form>
-
-{% if get_response %}
-    <h3>{{ get_response }}</h3>
+{% if response_status %}
+    <div> {{ response_status }}: </div><br>
 {% endif %}
 
 <h2>Config</h2>
