@@ -44,12 +44,7 @@ pub async fn index(
         match GetStatus::from_i32(response.get_ref().status) {
             Some(GetStatus::Ok) => {
                 context.insert("response_status", "OK");
-                // let response_string = response.get_ref().value.as_bytes()
-                //     .to_vec()
-                //     .into_iter()
-                //     .map(|c| c.to_string())
-                //     .collect::<String>();
-                // context.insert("get_response", &response_string);
+                context.insert("get_response", &response.get_ref().value);
             }
             Some(GetStatus::NotFound) => {
                 context.insert("response_status", "NOT_FOUND");

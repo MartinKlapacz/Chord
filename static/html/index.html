@@ -21,7 +21,12 @@
     <button type="submit">Submit</button>
 </form>
 {% if response_status %}
-    <div> {{ response_status }}: </div><br>
+    <div>
+        {{ response_status }}
+        {% if get_response %}
+            : {{ get_response }}
+        {% endif %}
+    </div>
 {% endif %}
 
 <h2>Config</h2>
