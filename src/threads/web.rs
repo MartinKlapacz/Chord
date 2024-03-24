@@ -15,9 +15,9 @@ use crate::threads::chord::connect_with_retry;
 
 #[derive(Deserialize)]
 struct QueryParams {
-    get_input: Option<String>,
-    put_key_input: Option<String>,
-    put_value_input: Option<String>,
+    get_request_key: Option<String>,
+    put_request_key: Option<String>,
+    put_request_value: Option<String>,
 }
 
 
@@ -34,22 +34,22 @@ pub async fn index(
     if query_params_option.is_some() {
         match query_params_option.unwrap().0 {
             QueryParams {
-                get_input: Some(get_input),
-                put_key_input: None,
-                put_value_input: None
+                get_request_key: Some(get_input),
+                put_request_key: None,
+                put_request_value: None
             } => {
                 perform_get_and_update_context(&get_input, &local_grpc_address, &mut context)
                     .await;
             }
             QueryParams {
-                get_input: None,
-                put_key_input: Some(put_key_input),
-                put_value_input: Some(put_value_input)
+                get_request_key: None,
+                put_request_key: Some(put_key_input),
+                put_request_value: Some(put_value_input)
             } => {
                 perform_put_and_update_context(&put_key_input, put_value_input, &local_grpc_address, &mut context)
                     .await;
             }
-            QueryParams { get_input: None, put_key_input: None, put_value_input: None } => {}
+            QueryParams { get_request_key: None, put_request_key: None, put_request_value: None } => {}
             _ => { panic!("Invalid query params") }
         }
     }
