@@ -10,7 +10,7 @@ use chord::utils::config::Config;
 use chord::utils::types::HashPos;
 
 use crate::node::finger_table::FingerTable;
-use crate::threads::chord::chord_proto::{GetRequest, GetStatus};
+use crate::threads::chord::chord_proto::{GetRequest, GetStatus, PutRequest};
 use crate::threads::chord::connect_with_retry;
 
 #[derive(Deserialize)]
@@ -37,13 +37,19 @@ pub async fn index(
                 get_input: Some(get_input),
                 put_key_input: None,
                 put_value_input: None
-            } => { perform_get_and_update_context(&get_input, &local_grpc_address, &mut context).await; }
+            } => {
+                perform_get_and_update_context(&get_input, &local_grpc_address, &mut context)
+                    .await;
+            }
             QueryParams {
                 get_input: None,
                 put_key_input: Some(put_key_input),
                 put_value_input: Some(put_value_input)
-            } => { perform_put_and_update_context(&put_key_input, &put_value_input, &local_grpc_address, &mut context).await; }
-            _ => {panic!("Invalid query params")}
+            } => {
+                perform_put_and_update_context(&put_key_input, put_value_input, &local_grpc_address, &mut context)
+                    .await;
+            }
+            _ => { panic!("Invalid query params") }
         }
     }
 
@@ -86,15 +92,19 @@ async fn perform_get_and_update_context(key: &String, local_grpc_address: &Strin
         }
         _ => panic!("Received invalid get response status")
     }
-
-
-    println!("GET {}", key)
 }
 
-async fn perform_put_and_update_context(key: &String, value: &String, local_grpc_address: &String, context: &mut Context) {
-    let local_chord_client = connect_with_retry(&local_grpc_address).await.unwrap();
+async fn perform_put_and_update_context(key: &String, value: String, local_grpc_address: &String, context: &mut Context) {
+    let mut local_chord_client = connect_with_retry(&local_grpc_address).await.unwrap();
+    let mut key_array: [u8; 32] = [0; 32];
+    for (i, c) in key.chars().enumerate() {
+        key_array[i] = c as u8;
+    }
 
-    // todo!()
-
-    println!("PUT {}, {}", key, value)
+    let _ = local_chord_client.put(Request::new(PutRequest {
+        key: key_array.to_vec(),
+        ttl: 100000,
+        replication: 0,
+        value,
+    })).await.unwrap();
 }
