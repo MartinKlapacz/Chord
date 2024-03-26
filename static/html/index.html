@@ -119,6 +119,7 @@
     <tr>
         <th>Finger index</th>
         <th>Address</th>
+        <th>Web interface</th>
         <th>Absolute Key</th>
         <th>Relative Key</th>
     </tr>
@@ -126,6 +127,9 @@
     <tr>
         <td>{{ loop.index }}</td>
         <td>{{ finger.address }}</td>
+        <td>
+            <a href="{{ finger.address | foo }}"> {{ finger.address | foo }} </a>
+        </td>
         <td>{{ finger.key }}</td>
         <td>{{ finger.key / max_pos * 100 | round(precision=6) }}%</td>
     </tr>
