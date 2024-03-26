@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "feature/deploy-instance-with-domain-urls" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "feature/deploy-instance-with-domain-urls" ]
 
 env:
   CARGO_TERM_COLOR: always

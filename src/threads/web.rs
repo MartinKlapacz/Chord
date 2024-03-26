@@ -10,6 +10,7 @@ use tonic::Request;
 
 use chord::utils::config::Config;
 use chord::utils::crypto;
+use chord::utils::tera::WebUrlFromGrpcUrl;
 use chord::utils::types::HashPos;
 
 use crate::node::finger_table::FingerTable;
@@ -23,26 +24,6 @@ struct QueryParams {
     put_request_value: Option<String>,
 }
 
-struct Foo {}
-
-impl Filter for Foo {
-    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> Result<Value> {
-        let value = value.to_string();
-        let value = &value[1..value.len() - 1];
-        match value {
-            "" => { Ok(Value::String(String::default())) }
-            value => {
-                let last_port_digit = value.as_bytes()[value.len() - 1] - 48;
-                let res = format!("http://chord.martinklapacz.org:571{}", last_port_digit);
-                Ok(Value::String(res))
-            }
-        }
-    }
-
-    fn is_safe(&self) -> bool {
-        true
-    }
-}
 
 #[get("/")]
 pub async fn index(
@@ -52,7 +33,7 @@ pub async fn index(
     query_params_option: Option<Query<QueryParams>>,
 ) -> impl Responder {
     let mut tera = Tera::new("static/html/**/*").unwrap();
-    tera.register_filter("foo", Foo {});
+    tera.register_filter("web_url_from_grpc_url", WebUrlFromGrpcUrl {});
     let mut context = Context::new();
 
     if query_params_option.is_some() {

@@ -128,7 +128,7 @@
         <td>{{ loop.index }}</td>
         <td>{{ finger.address }}</td>
         <td>
-            <a href="{{ finger.address | foo }}"> {{ finger.address | foo }} </a>
+            <a href="{{ finger.address | web_url_from_grpc_url }}"> {{ finger.address | web_url_from_grpc_url }} </a>
         </td>
         <td>{{ finger.key }}</td>
         <td>{{ finger.key / max_pos * 100 | round(precision=6) }}%</td>
